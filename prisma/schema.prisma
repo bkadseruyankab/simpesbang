@@ -80,7 +80,7 @@ model Service {
   kilometerService      Int       @default(0)
   estimasiBiaya         Float     @default(0)
   totalBiaya            Float     @default(0)
-  statusService         String    @default("DIAJUKAN") // DIAJUKAN, DISETUJUI, DITOLAK, DIPROSES, PENDING, SELESAI
+  statusService         String    @default("DIAJUKAN") // DIAJUKAN, PENGAJUAN, DISETUJUI, DITOLAK, DIPROSES, MENUNGGU_PERSETUJUAN, PENDING, SELESAI
   prioritas             String    @default("NORMAL") // RENDAH, NORMAL, TINGGI, DARURAT
   estimasiLamaPerbaikan Int?      // dalam hari
   tanggalSelesai        DateTime?
@@ -167,18 +167,19 @@ model BudgetHistory {
 }
 
 model Workshop {
-  id           String   @id @default(cuid())
-  namaBengkel  String
-  alamat       String?
-  noTelepon    String?
-  picBengkel   String?
-  email        String?
-  statusAktif  Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  namaBengkel     String
+  alamat          String?
+  noTelepon       String?
+  picBengkel      String?
+  email           String?
+  statusAktif     Boolean  @default(true)
+  canAddService   Boolean  @default(false) // Admin can toggle this to show/hide "Tambah Service" button for bengkel
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  services     Service[]
-  users        User[]
+  services        Service[]
+  users           User[]
 
   @@map("workshops")
 }

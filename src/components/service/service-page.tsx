@@ -10,7 +10,7 @@ import {
   XCircle, RefreshCw, ChevronLeft, ChevronRight, FileText,
   AlertTriangle, Info, X, Wallet, CalendarIcon, ArrowUpDown,
   Upload, Download, Image as ImageIcon, CalendarDays, History,
-  Car, Gauge
+  Car, Gauge, Send, ClipboardCheck
 } from 'lucide-react'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -73,6 +73,7 @@ interface ServiceItemForm {
 // ========== Constants ==========
 const STATUS_COLORS: Record<StatusService, string> = {
   DIAJUKAN: 'bg-blue-100 text-blue-800 border-blue-200',
+  PENGAJUAN: 'bg-cyan-100 text-cyan-800 border-cyan-200',
   DISETUJUI: 'bg-green-100 text-green-800 border-green-200',
   DITOLAK: 'bg-red-100 text-red-800 border-red-200',
   DIPROSES: 'bg-orange-100 text-orange-800 border-orange-200',
@@ -83,6 +84,7 @@ const STATUS_COLORS: Record<StatusService, string> = {
 
 const STATUS_LABELS: Record<StatusService, string> = {
   DIAJUKAN: 'Diajukan',
+  PENGAJUAN: 'Pengajuan',
   DISETUJUI: 'Disetujui',
   DITOLAK: 'Ditolak',
   DIPROSES: 'Diproses',
@@ -174,6 +176,8 @@ export function ServicePage() {
   const [rejectReason, setRejectReason] = useState('')
   const [showBengkelEdit, setShowBengkelEdit] = useState(false)
   const [bengkelEditService, setBengkelEditService] = useState<Service | null>(null)
+  const [showBengkelProgress, setShowBengkelProgress] = useState(false)
+  const [bengkelProgressService, setBengkelProgressService] = useState<Service | null>(null)
 
   // Build query params
   const queryParams = useMemo(() => {
@@ -224,8 +228,16 @@ export function ServicePage() {
     },
   })
 
+  // canCreateService check:
+  // - Admin/SuperAdmin: always true
+  // - Bengkel: check workshop.canAddService from workshops data
+  // - Pimpinan: never
   const canCreateService = isBengkel
-    ? settingsData?.bengkel_can_create_service === 'true'
+    ? (() => {
+        const workshops = Array.isArray(workshopsData) ? workshopsData : (workshopsData?.data || [])
+        const myWorkshop = workshops.find((w: { id: string; canAddService?: boolean }) => w.id === userBengkelId)
+        return !!myWorkshop?.canAddService
+      })()
     : isAdmin
 
   // Handle both array and {data:[...]} response formats
@@ -334,9 +346,52 @@ export function ServicePage() {
     },
   })
 
-  // Bengkel update mutation (includes marking as SELESAI/MENUNGGU_PERSETUJUAN)
-  const bengkelUpdateMutation = useMutation({
-    mutationFn: async (data: { id: string; progress: number; statusService?: string; catatanBengkel?: string; markAsSelesai?: boolean }) => {
+  // Bengkel submit pengajuan mutation
+  const bengkelPengajuanMutation = useMutation({
+    mutationFn: async (data: { id: string; items: ServiceItemForm[]; catatanBengkel?: string; submitPengajuan: boolean }) => {
+      // First, save the items via PUT /api/service/[id]/items
+      if (data.items && data.items.length > 0) {
+        const itemsRes = await fetch(`/api/service/${data.id}/items`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: data.items.map(item => ({
+              ...item,
+              totalHarga: item.quantity * item.hargaSatuan,
+            })),
+          }),
+        })
+        if (!itemsRes.ok) {
+          const err = await itemsRes.json()
+          throw new Error(err.error || 'Gagal menyimpan item service')
+        }
+      }
+      // Then submit pengajuan
+      const res = await fetch(`/api/service/${data.id}/progress`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          catatanBengkel: data.catatanBengkel,
+          submitPengajuan: true,
+        }),
+      })
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Gagal mengirim pengajuan') }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['services'] })
+      toast({ title: 'Berhasil', description: 'Pengajuan berhasil dikirim' })
+      setShowBengkelEdit(false)
+      setBengkelEditService(null)
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Gagal', description: error.message, variant: 'destructive' })
+    },
+  })
+
+  // Bengkel progress update mutation (DISETUJUI/DIPROSES → update progress / mark as selesai)
+  const bengkelProgressMutation = useMutation({
+    mutationFn: async (data: { id: string; progress: number; catatanBengkel?: string; markAsSelesai?: boolean }) => {
       const payload: Record<string, unknown> = {
         progress: data.progress,
         catatanBengkel: data.catatanBengkel,
@@ -344,8 +399,9 @@ export function ServicePage() {
       if (data.markAsSelesai) {
         payload.statusService = 'MENUNGGU_PERSETUJUAN'
         payload.progress = 100
-      } else if (data.statusService) {
-        payload.statusService = data.statusService
+        payload.markAsSelesai = true
+      } else if (data.progress > 0) {
+        payload.statusService = 'DIPROSES'
       }
       const res = await fetch(`/api/service/${data.id}/progress`, {
         method: 'PUT',
@@ -358,8 +414,8 @@ export function ServicePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['services'] })
       toast({ title: 'Berhasil', description: 'Service berhasil diupdate' })
-      setShowBengkelEdit(false)
-      setBengkelEditService(null)
+      setShowBengkelProgress(false)
+      setBengkelProgressService(null)
     },
     onError: (error: Error) => {
       toast({ title: 'Gagal', description: error.message, variant: 'destructive' })
@@ -373,7 +429,6 @@ export function ServicePage() {
       files.forEach((file) => formData.append('files', file))
       formData.append('jenisDokumen', jenisDokumen)
 
-      // Simulate progress
       setUploadProgress(10)
 
       const res = await fetch(`/api/service/${serviceId}/documents`, {
@@ -463,6 +518,11 @@ export function ServicePage() {
     setShowBengkelEdit(true)
   }
 
+  const handleBengkelProgress = (service: Service) => {
+    setBengkelProgressService(service)
+    setShowBengkelProgress(true)
+  }
+
   const handleBengkelUploadNota = (service: Service) => {
     setDetailService(service)
     setShowUploadNota(true)
@@ -479,6 +539,47 @@ export function ServicePage() {
   const handleSearchChange = (value: string) => {
     setSearch(value)
     setPage(1)
+  }
+
+  // ========== Role-based action helpers ==========
+  const getBengkelActions = (status: StatusService) => {
+    switch (status) {
+      case 'DIAJUKAN':
+        return { edit: true, uploadNota: true, updateProgress: false, tandaiSelesai: false, detail: true }
+      case 'DITOLAK':
+        return { edit: true, uploadNota: false, updateProgress: false, tandaiSelesai: false, detail: true }
+      case 'PENGAJUAN':
+        return { edit: false, uploadNota: false, updateProgress: false, tandaiSelesai: false, detail: true }
+      case 'DISETUJUI':
+        return { edit: false, uploadNota: true, updateProgress: true, tandaiSelesai: false, detail: true }
+      case 'DIPROSES':
+        return { edit: false, uploadNota: true, updateProgress: true, tandaiSelesai: true, detail: true }
+      case 'MENUNGGU_PERSETUJUAN':
+        return { edit: false, uploadNota: false, updateProgress: false, tandaiSelesai: false, detail: true }
+      case 'SELESAI':
+      default:
+        return { edit: false, uploadNota: false, updateProgress: false, tandaiSelesai: false, detail: true }
+    }
+  }
+
+  const getAdminActions = (status: StatusService) => {
+    switch (status) {
+      case 'DIAJUKAN':
+        return { edit: true, approveReject: true, updateProgress: false, delete: true, detail: true }
+      case 'PENGAJUAN':
+        return { edit: false, approveReject: true, updateProgress: false, delete: false, detail: true }
+      case 'DITOLAK':
+        return { edit: true, approveReject: false, updateProgress: false, delete: true, detail: true }
+      case 'DISETUJUI':
+        return { edit: true, approveReject: false, updateProgress: true, delete: true, detail: true }
+      case 'DIPROSES':
+        return { edit: false, approveReject: false, updateProgress: true, delete: true, detail: true }
+      case 'MENUNGGU_PERSETUJUAN':
+        return { edit: false, approveReject: true, updateProgress: false, delete: false, detail: true }
+      case 'SELESAI':
+      default:
+        return { edit: false, approveReject: false, updateProgress: false, delete: false, detail: true }
+    }
   }
 
   return (
@@ -656,98 +757,119 @@ export function ServicePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {services.map((service: Service, idx: number) => (
-                      <TableRow key={service.id} className="hover:bg-muted/50">
-                        <TableCell className="text-center text-sm text-muted-foreground">
-                          {(page - 1) * limit + idx + 1}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm font-medium">
-                          {service.nomorService}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {formatDate(service.tanggalService)}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <span className="text-sm font-medium">{service.vehicle?.nomorPolisi}</span>
-                            <br />
-                            <span className="text-xs text-muted-foreground">
-                              {service.vehicle?.merk} {service.vehicle?.type}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm">{service.bengkel?.namaBengkel}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">{service.jenisService}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right text-sm font-medium">
-                          {formatRupiah(service.totalBiaya)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={cn('text-xs border', STATUS_COLORS[service.statusService as StatusService])}>
-                            {STATUS_LABELS[service.statusService as StatusService]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 min-w-[100px]">
-                            <Progress value={service.progress} className="h-2 flex-1" />
-                            <span className="text-xs text-muted-foreground w-8 text-right">{service.progress}%</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            {/* Detail button - visible to all roles */}
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDetail(service)} title="Detail">
-                              <Eye className="h-4 w-4" />
-                            </Button>
+                    {services.map((service: Service, idx: number) => {
+                      const bengkelActions = isBengkel ? getBengkelActions(service.statusService as StatusService) : null
+                      const adminActions = isAdmin ? getAdminActions(service.statusService as StatusService) : null
 
-                            {/* BENGKEL role actions */}
-                            {isBengkel && (
-                              <>
-                                {/* Edit button for BENGKEL - only for DIPROSES/PENDING status */}
-                                {['DIPROSES', 'PENDING', 'DISETUJUI'].includes(service.statusService) && (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleBengkelEdit(service)} title="Update Progress & Catatan">
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                {/* Upload Nota button for BENGKEL - for DIPROSES/PENDING status */}
-                                {['DIPROSES', 'PENDING', 'DISETUJUI'].includes(service.statusService) && (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleBengkelUploadNota(service)} title="Upload Nota">
-                                    <Upload className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </>
-                            )}
+                      return (
+                        <TableRow key={service.id} className="hover:bg-muted/50">
+                          <TableCell className="text-center text-sm text-muted-foreground">
+                            {(page - 1) * limit + idx + 1}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm font-medium">
+                            {service.nomorService}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {formatDate(service.tanggalService)}
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <span className="text-sm font-medium">{service.vehicle?.nomorPolisi}</span>
+                              <br />
+                              <span className="text-xs text-muted-foreground">
+                                {service.vehicle?.merk} {service.vehicle?.type}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">{service.bengkel?.namaBengkel}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{service.jenisService}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">
+                            {formatRupiah(service.totalBiaya)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={cn('text-xs border', STATUS_COLORS[service.statusService as StatusService])}>
+                              {STATUS_LABELS[service.statusService as StatusService]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 min-w-[100px]">
+                              <Progress value={service.progress} className="h-2 flex-1" />
+                              <span className="text-xs text-muted-foreground w-8 text-right">{service.progress}%</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-1">
+                              {/* Detail button - visible to all roles */}
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDetail(service)} title="Detail">
+                                <Eye className="h-4 w-4" />
+                              </Button>
 
-                            {/* PIMPINAN role - detail only, no other actions */}
+                              {/* BENGKEL role actions */}
+                              {isBengkel && bengkelActions && (
+                                <>
+                                  {/* Edit button - for DIAJUKAN/DITOLAK (opens BengkelEditDialog to add items & submit pengajuan) */}
+                                  {bengkelActions.edit && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleBengkelEdit(service)} title="Edit & Kirim Pengajuan">
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {/* Upload Nota */}
+                                  {bengkelActions.uploadNota && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleBengkelUploadNota(service)} title="Upload Nota">
+                                      <Upload className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {/* Update Progress - for DISETUJUI/DIPROSES */}
+                                  {bengkelActions.updateProgress && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleBengkelProgress(service)} title="Update Progress">
+                                      <RefreshCw className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {/* Tandai Selesai - for DIPROSES */}
+                                  {bengkelActions.tandaiSelesai && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleBengkelProgress(service)} title="Tandai Selesai">
+                                      <CheckCircle className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </>
+                              )}
 
-                            {/* ADMIN/SUPER_ADMIN role actions */}
-                            {isAdmin && (
-                              <>
-                                {(service.statusService === 'DIAJUKAN' || service.statusService === 'DITOLAK') && (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(service)} title="Edit">
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                {(service.statusService === 'DIAJUKAN' || service.statusService === 'MENUNGGU_PERSETUJUAN') && (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleApproveReject(service)} title="Setujui/Tolak">
-                                    <CheckCircle className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                {['DISETUJUI', 'DIPROSES', 'PENDING'].includes(service.statusService) && (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleProgress(service)} title="Update Progress">
-                                    <RefreshCw className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                {service.statusService !== 'SELESAI' && (
-                                  <DeleteButton serviceId={service.id} nomorService={service.nomorService} onDelete={() => deleteMutation.mutate(service.id)} isDeleting={deleteMutation.isPending} />
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                              {/* PIMPINAN role - detail only, no other actions */}
+
+                              {/* ADMIN/SUPER_ADMIN role actions */}
+                              {isAdmin && adminActions && (
+                                <>
+                                  {/* Edit - for DIAJUKAN/DITOLAK/DISETUJUI */}
+                                  {adminActions.edit && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(service)} title="Edit">
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {/* Approve/Reject - for DIAJUKAN/PENGAJUAN/MENUNGGU_PERSETUJUAN */}
+                                  {adminActions.approveReject && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleApproveReject(service)} title="Setujui/Tolak">
+                                      <CheckCircle className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {/* Update Progress - for DISETUJUI/DIPROSES */}
+                                  {adminActions.updateProgress && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleProgress(service)} title="Update Progress">
+                                      <RefreshCw className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {/* Delete */}
+                                  {adminActions.delete && (
+                                    <DeleteButton serviceId={service.id} nomorService={service.nomorService} onDelete={() => deleteMutation.mutate(service.id)} isDeleting={deleteMutation.isPending} />
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -774,7 +896,7 @@ export function ServicePage() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Add/Edit Dialog (Admin) */}
       <ServiceFormDialog
         open={showAddEdit}
         onOpenChange={(open) => { setShowAddEdit(open); if (!open) setEditingService(null) }}
@@ -785,52 +907,20 @@ export function ServicePage() {
         isSubmitting={createMutation.isPending || updateMutation.isPending}
       />
 
-      {/* Approval Dialog */}
-      <Dialog open={showApproval} onOpenChange={setShowApproval}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Proses Persetujuan</DialogTitle>
-            <DialogDescription>
-              Service {approvalService?.nomorService} - {approvalService?.vehicle?.nomorPolisi}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="rounded-lg border p-3 text-sm">
-              <p><strong>Bengkel:</strong> {approvalService?.bengkel?.namaBengkel}</p>
-              <p><strong>Jenis:</strong> {approvalService?.jenisService}</p>
-              <p><strong>Total Biaya:</strong> {formatRupiah(approvalService?.totalBiaya || 0)}</p>
-            </div>
-            <div>
-              <Label>Alasan Penolakan (jika menolak)</Label>
-              <Textarea placeholder="Masukkan alasan penolakan..." value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} className="mt-1" />
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (!rejectReason.trim()) {
-                  toast({ title: 'Peringatan', description: 'Alasan penolakan wajib diisi', variant: 'destructive' })
-                  return
-                }
-                approveMutation.mutate({ id: approvalService!.id, action: 'reject', rejectedReason: rejectReason })
-              }}
-              disabled={approveMutation.isPending}
-            >
-              <XCircle className="h-4 w-4 mr-1" /> Tolak
-            </Button>
-            <Button
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() => approveMutation.mutate({ id: approvalService!.id, action: 'approve' })}
-              disabled={approveMutation.isPending}
-            >
-              <CheckCircle className="h-4 w-4 mr-1" /> Setujui
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Admin Approval Dialog */}
+      <ApprovalDialog
+        key={approvalService?.id || 'approval-new'}
+        open={showApproval}
+        onOpenChange={(open) => { setShowApproval(open); if (!open) { setApprovalService(null); setRejectReason('') } }}
+        service={approvalService}
+        rejectReason={rejectReason}
+        onRejectReasonChange={setRejectReason}
+        onApprove={() => approveMutation.mutate({ id: approvalService!.id, action: 'approve' })}
+        onReject={(reason) => approveMutation.mutate({ id: approvalService!.id, action: 'reject', rejectedReason: reason })}
+        isSubmitting={approveMutation.isPending}
+      />
 
-      {/* Progress Dialog */}
+      {/* Admin Progress Dialog */}
       <ProgressDialog
         key={progressService?.id || 'new'}
         open={showProgress}
@@ -840,14 +930,24 @@ export function ServicePage() {
         isSubmitting={progressMutation.isPending}
       />
 
-      {/* Bengkel Edit Dialog */}
+      {/* Bengkel Edit Dialog (DIAJUKAN/DITOLAK - add items & submit pengajuan) */}
       <BengkelEditDialog
-        key={bengkelEditService?.id || 'bengkel-new'}
+        key={bengkelEditService?.id || 'bengkel-edit-new'}
         open={showBengkelEdit}
-        onOpenChange={setShowBengkelEdit}
+        onOpenChange={(open) => { setShowBengkelEdit(open); if (!open) setBengkelEditService(null) }}
         service={bengkelEditService}
-        onSubmit={(data) => bengkelUpdateMutation.mutate({ id: bengkelEditService!.id, ...data })}
-        isSubmitting={bengkelUpdateMutation.isPending}
+        onSubmit={(data) => bengkelPengajuanMutation.mutate({ id: bengkelEditService!.id, ...data })}
+        isSubmitting={bengkelPengajuanMutation.isPending}
+      />
+
+      {/* Bengkel Progress Dialog (DISETUJUI/DIPROSES - update progress / mark as selesai) */}
+      <BengkelProgressDialog
+        key={bengkelProgressService?.id || 'bengkel-progress-new'}
+        open={showBengkelProgress}
+        onOpenChange={(open) => { setShowBengkelProgress(open); if (!open) setBengkelProgressService(null) }}
+        service={bengkelProgressService}
+        onSubmit={(data) => bengkelProgressMutation.mutate({ id: bengkelProgressService!.id, ...data })}
+        isSubmitting={bengkelProgressMutation.isPending}
       />
 
       {/* Detail Sheet - Modernized */}
@@ -1056,7 +1156,6 @@ export function ServicePage() {
                     </CardHeader>
                     <CardContent>
                       <div className="relative pl-6 max-h-48 overflow-y-auto">
-                        {/* Timeline line */}
                         <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-slate-200" />
                         <div className="space-y-4">
                           {detail.history.map((h: { id: string; status: string; keterangan: string | null; createdAt: string }, idx: number) => (
@@ -1233,7 +1332,152 @@ function DeleteButton({ serviceId, nomorService, onDelete, isDeleting }: { servi
   )
 }
 
-// ========== Service Form Dialog ==========
+// ========== Admin Approval Dialog ==========
+interface ApprovalDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  service: Service | null
+  rejectReason: string
+  onRejectReasonChange: (reason: string) => void
+  onApprove: () => void
+  onReject: (reason: string) => void
+  isSubmitting: boolean
+}
+
+function ApprovalDialog({ open, onOpenChange, service, rejectReason, onRejectReasonChange, onApprove, onReject, isSubmitting }: ApprovalDialogProps) {
+  if (!service) return null
+
+  const status = service.statusService as StatusService
+  const isPengajuan = status === 'PENGAJUAN'
+  const isMenungguPersetujuan = status === 'MENUNGGU_PERSETUJUAN'
+  const isDiajukan = status === 'DIAJUKAN'
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ClipboardCheck className="h-5 w-5" />
+            {isMenungguPersetujuan ? 'Persetujuan Penyelesaian' : 'Proses Persetujuan'}
+          </DialogTitle>
+          <DialogDescription>
+            Service {service.nomorService} - {service.vehicle?.nomorPolisi}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          {/* Status context */}
+          <div className={cn(
+            'rounded-lg border-2 p-3',
+            isPengajuan && 'border-cyan-300 bg-cyan-50',
+            isMenungguPersetujuan && 'border-amber-300 bg-amber-50',
+            isDiajukan && 'border-blue-300 bg-blue-50',
+          )}>
+            <div className="flex items-center gap-2 mb-2">
+              {isPengajuan && <Send className="h-4 w-4 text-cyan-700" />}
+              {isMenungguPersetujuan && <CheckCircle className="h-4 w-4 text-amber-700" />}
+              {isDiajukan && <Info className="h-4 w-4 text-blue-700" />}
+              <span className="font-semibold text-sm">
+                {isPengajuan && 'Bengkel telah mengirimkan pengajuan item service'}
+                {isMenungguPersetujuan && 'Bengkel menandai service telah selesai'}
+                {isDiajukan && 'Service baru diajukan'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {isPengajuan && 'Silakan periksa item dan biaya yang diajukan bengkel sebelum menyetujui.'}
+              {isMenungguPersetujuan && 'Silakan periksa hasil pekerjaan sebelum menyetujui penyelesaian.'}
+              {isDiajukan && 'Silakan periksa detail service sebelum menyetujui.'}
+            </p>
+          </div>
+
+          {/* Service info */}
+          <div className="rounded-lg border p-3 text-sm space-y-1">
+            <p><strong>Bengkel:</strong> {service.bengkel?.namaBengkel}</p>
+            <p><strong>Jenis:</strong> {service.jenisService} • <strong>Prioritas:</strong> {service.prioritas}</p>
+            <p><strong>Total Biaya:</strong> {formatRupiah(service.totalBiaya)}</p>
+            {service.keterangan && <p><strong>Keterangan:</strong> {service.keterangan}</p>}
+          </div>
+
+          {/* Items table for PENGAJUAN */}
+          {(isPengajuan || isMenungguPersetujuan) && service.items && service.items.length > 0 && (
+            <div className="rounded-lg border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="text-xs">Item</TableHead>
+                    <TableHead className="text-xs text-center">Qty</TableHead>
+                    <TableHead className="text-xs text-right">Harga Satuan</TableHead>
+                    <TableHead className="text-xs text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {service.items.map((item: ServiceItem) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="text-sm">
+                        {item.itemName}
+                        {item.keterangan && <p className="text-xs text-muted-foreground">{item.keterangan}</p>}
+                      </TableCell>
+                      <TableCell className="text-sm text-center">{item.quantity}</TableCell>
+                      <TableCell className="text-sm text-right">{formatRupiah(item.hargaSatuan)}</TableCell>
+                      <TableCell className="text-sm text-right font-medium">{formatRupiah(item.totalHarga)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="border-t p-3 bg-muted/30 flex items-center justify-between">
+                <span className="text-sm font-semibold">Total Biaya</span>
+                <span className="text-lg font-bold">{formatRupiah(service.totalBiaya)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Catatan Bengkel */}
+          {service.catatanBengkel && (
+            <div className="rounded-lg border p-3 text-sm">
+              <p className="text-xs text-muted-foreground mb-1">Catatan Bengkel:</p>
+              <p>{service.catatanBengkel}</p>
+            </div>
+          )}
+
+          {/* Reject reason */}
+          <div>
+            <Label className="text-sm font-medium">Alasan Penolakan (wajib diisi jika menolak)</Label>
+            <Textarea
+              placeholder="Masukkan alasan penolakan..."
+              value={rejectReason}
+              onChange={(e) => onRejectReasonChange(e.target.value)}
+              className="mt-1"
+              rows={3}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            variant="destructive"
+            onClick={() => {
+              if (!rejectReason.trim()) {
+                toast({ title: 'Peringatan', description: 'Alasan penolakan wajib diisi', variant: 'destructive' })
+                return
+              }
+              onReject(rejectReason)
+            }}
+            disabled={isSubmitting}
+          >
+            <XCircle className="h-4 w-4 mr-1" /> Tolak
+          </Button>
+          <Button
+            className="bg-green-600 hover:bg-green-700"
+            onClick={onApprove}
+            disabled={isSubmitting}
+          >
+            <CheckCircle className="h-4 w-4 mr-1" /> Setujui
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ========== Service Form Dialog (Admin creates/edits) ==========
 interface ServiceFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1281,7 +1525,7 @@ function ServiceFormDialog({ open, onOpenChange, editingService, vehicles, works
       kilometerService: 0,
       estimasiBiaya: 0,
       estimasiLamaPerbaikan: 0,
-      items: [{ itemName: '', quantity: 1, hargaSatuan: 0, keterangan: '' }],
+      items: [],
     },
   })
 
@@ -1321,7 +1565,7 @@ function ServiceFormDialog({ open, onOpenChange, editingService, vehicles, works
                 hargaSatuan: item.hargaSatuan,
                 keterangan: item.keterangan || '',
               }))
-            : [{ itemName: '', quantity: 1, hargaSatuan: 0, keterangan: '' }],
+            : [],
       })
     } else {
       form.reset({
@@ -1334,7 +1578,7 @@ function ServiceFormDialog({ open, onOpenChange, editingService, vehicles, works
         kilometerService: 0,
         estimasiBiaya: 0,
         estimasiLamaPerbaikan: 0,
-        items: [{ itemName: '', quantity: 1, hargaSatuan: 0, keterangan: '' }],
+        items: [],
       })
       setBudgetValidation(null)
     }
@@ -1491,88 +1735,96 @@ function ServiceFormDialog({ open, onOpenChange, editingService, vehicles, works
 
           <Separator />
 
-          {/* Spreadsheet-Style Items Section */}
+          {/* Spreadsheet-Style Items Section (optional for admin) */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold uppercase text-muted-foreground flex items-center gap-2">
-                <FileText className="h-4 w-4" /> Item Service
+                <FileText className="h-4 w-4" /> Item Service <span className="text-xs font-normal">(Opsional)</span>
               </h3>
               <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1">
                 <Plus className="h-3 w-3" /> Tambah Item
               </Button>
             </div>
 
-            <div className="rounded-lg border overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/50 border-b">
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs w-8">#</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs min-w-[200px]">Nama Item *</th>
-                    <th className="px-3 py-2 text-center font-medium text-muted-foreground text-xs w-20">Qty *</th>
-                    <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs w-36">Harga Satuan *</th>
-                    <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs w-36">Total</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs min-w-[150px]">Keterangan</th>
-                    <th className="px-3 py-2 w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fields.map((field, index) => {
-                    const qty = form.watch(`items.${index}.quantity`) || 0
-                    const harga = form.watch(`items.${index}.hargaSatuan`) || 0
-                    const rowTotal = qty * harga
+            {fields.length > 0 ? (
+              <div className="rounded-lg border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 border-b">
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs w-8">#</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs min-w-[200px]">Nama Item *</th>
+                      <th className="px-3 py-2 text-center font-medium text-muted-foreground text-xs w-20">Qty *</th>
+                      <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs w-36">Harga Satuan *</th>
+                      <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs w-36">Total</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs min-w-[150px]">Keterangan</th>
+                      <th className="px-3 py-2 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fields.map((field, index) => {
+                      const qty = form.watch(`items.${index}.quantity`) || 0
+                      const harga = form.watch(`items.${index}.hargaSatuan`) || 0
+                      const rowTotal = qty * harga
 
-                    return (
-                      <tr key={field.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                        <td className="px-3 py-1.5 text-muted-foreground text-xs">{index + 1}</td>
-                        <td className="px-1 py-1.5">
-                          <Input
-                            placeholder="Nama item/suku cadang"
-                            className="h-8 text-sm border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
-                            {...form.register(`items.${index}.itemName`)}
-                          />
-                        </td>
-                        <td className="px-1 py-1.5">
-                          <Input
-                            type="number" min={1}
-                            className="h-8 text-sm text-center border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent w-full"
-                            {...form.register(`items.${index}.quantity`, { valueAsNumber: true })}
-                          />
-                        </td>
-                        <td className="px-1 py-1.5">
-                          <Input
-                            type="number" min={0}
-                            className="h-8 text-sm text-right border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
-                            {...form.register(`items.${index}.hargaSatuan`, { valueAsNumber: true })}
-                          />
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-medium text-sm">{formatRupiah(rowTotal)}</td>
-                        <td className="px-1 py-1.5">
-                          <Input
-                            placeholder="Catatan"
-                            className="h-8 text-sm border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
-                            {...form.register(`items.${index}.keterangan`)}
-                          />
-                        </td>
-                        <td className="px-1 py-1.5">
-                          {fields.length > 1 && (
+                      return (
+                        <tr key={field.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                          <td className="px-3 py-1.5 text-muted-foreground text-xs">{index + 1}</td>
+                          <td className="px-1 py-1.5">
+                            <Input
+                              placeholder="Nama item/suku cadang"
+                              className="h-8 text-sm border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
+                              {...form.register(`items.${index}.itemName`)}
+                            />
+                          </td>
+                          <td className="px-1 py-1.5">
+                            <Input
+                              type="number" min={1}
+                              className="h-8 text-sm text-center border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent w-full"
+                              {...form.register(`items.${index}.quantity`, { valueAsNumber: true })}
+                            />
+                          </td>
+                          <td className="px-1 py-1.5">
+                            <Input
+                              type="number" min={0}
+                              className="h-8 text-sm text-right border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
+                              {...form.register(`items.${index}.hargaSatuan`, { valueAsNumber: true })}
+                            />
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-medium text-sm">{formatRupiah(rowTotal)}</td>
+                          <td className="px-1 py-1.5">
+                            <Input
+                              placeholder="Catatan"
+                              className="h-8 text-sm border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
+                              {...form.register(`items.${index}.keterangan`)}
+                            />
+                          </td>
+                          <td className="px-1 py-1.5">
                             <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => remove(index)}>
                               <X className="h-3.5 w-3.5" />
                             </Button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-muted/50 border-t">
-                    <td colSpan={4} className="px-3 py-2 text-right font-semibold text-sm">Total Biaya:</td>
-                    <td className="px-3 py-2 text-right font-bold text-sm text-primary">{formatRupiah(totalBiaya)}</td>
-                    <td colSpan={2}></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-muted/50 border-t">
+                      <td colSpan={4} className="px-3 py-2 text-right font-semibold text-sm">Total Biaya:</td>
+                      <td className="px-3 py-2 text-right font-bold text-sm text-primary">{formatRupiah(totalBiaya)}</td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-lg border-2 border-dashed p-6 text-center text-muted-foreground">
+                <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Belum ada item. Item bisa ditambahkan nanti oleh bengkel.</p>
+                <Button type="button" variant="outline" size="sm" className="mt-2 gap-1" onClick={addItem}>
+                  <Plus className="h-3 w-3" /> Tambah Item
+                </Button>
+              </div>
+            )}
           </div>
 
           <Separator />
@@ -1684,7 +1936,7 @@ function ServiceFormDialog({ open, onOpenChange, editingService, vehicles, works
   )
 }
 
-// ========== Progress Update Dialog ==========
+// ========== Progress Update Dialog (Admin) ==========
 interface ProgressDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1722,19 +1974,13 @@ function ProgressDialog({ open, onOpenChange, service, onSubmit, isSubmitting }:
               <SelectContent>
                 <SelectItem value="DIPROSES">Diproses</SelectItem>
                 <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="SELESAI">Selesai</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Catatan Bengkel</Label>
-            <Textarea className="mt-1" placeholder="Catatan dari bengkel..." value={catatanBengkel} onChange={(e) => setCatatanBengkel(e.target.value)} />
+            <Label>Catatan</Label>
+            <Textarea className="mt-1" placeholder="Catatan..." value={catatanBengkel} onChange={(e) => setCatatanBengkel(e.target.value)} />
           </div>
-          {progress === 100 && (
-            <div className="rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-              Progress 100% - Status akan otomatis diubah menjadi <strong>SELESAI</strong> dan tanggal selesai akan dicatat.
-            </div>
-          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Batal</Button>
@@ -1747,58 +1993,278 @@ function ProgressDialog({ open, onOpenChange, service, onSubmit, isSubmitting }:
   )
 }
 
-export default ServicePage
-
-// ========== Bengkel Edit Dialog ==========
+// ========== Bengkel Edit Dialog (DIAJUKAN/DITOLAK - add items & submit pengajuan) ==========
 interface BengkelEditDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   service: Service | null
-  onSubmit: (data: { progress: number; statusService?: string; catatanBengkel?: string; markAsSelesai?: boolean }) => void
+  onSubmit: (data: { items: ServiceItemForm[]; catatanBengkel?: string; submitPengajuan: boolean }) => void
   isSubmitting: boolean
 }
 
 function BengkelEditDialog({ open, onOpenChange, service, onSubmit, isSubmitting }: BengkelEditDialogProps) {
+  const form = useForm<{
+    items: ServiceItemForm[]
+    catatanBengkel: string
+  }>({
+    defaultValues: {
+      items: [],
+      catatanBengkel: '',
+    },
+  })
+
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' })
+
+  const watchedItems = form.watch('items')
+
+  // Calculate total
+  const totalBiaya = useMemo(() => {
+    return (watchedItems || []).reduce(
+      (sum, item) => sum + ((item.quantity || 0) * (item.hargaSatuan || 0)),
+      0
+    )
+  }, [watchedItems])
+
+  // Populate form when service changes
+  useEffect(() => {
+    if (service) {
+      form.reset({
+        items: service.items && service.items.length > 0
+          ? service.items.map((item) => ({
+              itemName: item.itemName,
+              quantity: item.quantity,
+              hargaSatuan: item.hargaSatuan,
+              keterangan: item.keterangan || '',
+            }))
+          : [{ itemName: '', quantity: 1, hargaSatuan: 0, keterangan: '' }],
+        catatanBengkel: service.catatanBengkel || '',
+      })
+    } else {
+      form.reset({
+        items: [{ itemName: '', quantity: 1, hargaSatuan: 0, keterangan: '' }],
+        catatanBengkel: '',
+      })
+    }
+  }, [service, form])
+
+  const addItem = () => {
+    append({ itemName: '', quantity: 1, hargaSatuan: 0, keterangan: '' })
+  }
+
+  const handleKirimPengajuan = () => {
+    // Validate that at least one item has a name
+    const items = form.getValues('items')
+    const validItems = items.filter((item) => item.itemName.trim() !== '')
+    if (validItems.length === 0) {
+      toast({ title: 'Peringatan', description: 'Minimal satu item service harus diisi', variant: 'destructive' })
+      return
+    }
+    // Validate all items with names have valid qty and price
+    const invalidItem = validItems.find((item) => item.quantity <= 0 || item.hargaSatuan < 0)
+    if (invalidItem) {
+      toast({ title: 'Peringatan', description: 'Pastikan semua item memiliki kuantitas dan harga yang valid', variant: 'destructive' })
+      return
+    }
+    const catatanBengkel = form.getValues('catatanBengkel')
+    onSubmit({ items: validItems, catatanBengkel, submitPengajuan: true })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wrench className="h-5 w-5" />
+            Edit & Kirim Pengajuan
+          </DialogTitle>
+          <DialogDescription>
+            Service {service?.nomorService} - {service?.vehicle?.nomorPolisi}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 py-4">
+          {/* Service Info Summary */}
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+            <p><strong>Kendaraan:</strong> {service?.vehicle?.nomorPolisi} - {service?.vehicle?.merk} {service?.vehicle?.type}</p>
+            <p><strong>Bengkel:</strong> {service?.bengkel?.namaBengkel}</p>
+            <p><strong>Jenis:</strong> {service?.jenisService} • <strong>Prioritas:</strong> {service?.prioritas}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-muted-foreground">Status saat ini:</span>
+              <Badge className={cn('text-xs border', STATUS_COLORS[service?.statusService as StatusService])}>
+                {STATUS_LABELS[service?.statusService as StatusService]}
+              </Badge>
+            </div>
+            {service?.rejectedReason && (
+              <div className="mt-2 rounded-md bg-red-50 border border-red-200 p-2 text-sm text-red-800">
+                <strong>Alasan Ditolak:</strong> {service.rejectedReason}
+              </div>
+            )}
+          </div>
+
+          {/* Info about pengajuan */}
+          <div className="rounded-lg border-2 border-cyan-300 bg-cyan-50 p-3 flex items-start gap-3">
+            <Send className="h-5 w-5 text-cyan-700 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold text-sm text-cyan-800">Kirim Pengajuan ke Admin</p>
+              <p className="text-xs text-cyan-700 mt-0.5">
+                Tambahkan item service beserta harga, lalu klik &quot;Kirim Pengajuan&quot; untuk mengirimkan ke admin
+                untuk mendapatkan persetujuan. Status akan berubah menjadi <Badge className="text-xs border bg-cyan-100 text-cyan-800 border-cyan-200">Pengajuan</Badge>.
+              </p>
+            </div>
+          </div>
+
+          {/* Items Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase text-muted-foreground flex items-center gap-2">
+                <FileText className="h-4 w-4" /> Item Service
+              </h3>
+              <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1">
+                <Plus className="h-3 w-3" /> Tambah Item
+              </Button>
+            </div>
+
+            <div className="rounded-lg border overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b">
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs w-8">#</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs min-w-[200px]">Nama Item *</th>
+                    <th className="px-3 py-2 text-center font-medium text-muted-foreground text-xs w-20">Qty *</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs w-36">Harga Satuan *</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs w-36">Total</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs min-w-[150px]">Keterangan</th>
+                    <th className="px-3 py-2 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fields.map((field, index) => {
+                    const qty = form.watch(`items.${index}.quantity`) || 0
+                    const harga = form.watch(`items.${index}.hargaSatuan`) || 0
+                    const rowTotal = qty * harga
+
+                    return (
+                      <tr key={field.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-1.5 text-muted-foreground text-xs">{index + 1}</td>
+                        <td className="px-1 py-1.5">
+                          <Input
+                            placeholder="Nama item/suku cadang"
+                            className="h-8 text-sm border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
+                            {...form.register(`items.${index}.itemName`)}
+                          />
+                        </td>
+                        <td className="px-1 py-1.5">
+                          <Input
+                            type="number" min={1}
+                            className="h-8 text-sm text-center border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent w-full"
+                            {...form.register(`items.${index}.quantity`, { valueAsNumber: true })}
+                          />
+                        </td>
+                        <td className="px-1 py-1.5">
+                          <Input
+                            type="number" min={0}
+                            className="h-8 text-sm text-right border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
+                            {...form.register(`items.${index}.hargaSatuan`, { valueAsNumber: true })}
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-medium text-sm">{formatRupiah(rowTotal)}</td>
+                        <td className="px-1 py-1.5">
+                          <Input
+                            placeholder="Catatan"
+                            className="h-8 text-sm border-0 shadow-none focus-visible:ring-1 focus-visible:ring-ring bg-transparent"
+                            {...form.register(`items.${index}.keterangan`)}
+                          />
+                        </td>
+                        <td className="px-1 py-1.5">
+                          {fields.length > 1 && (
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => remove(index)}>
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-muted/50 border-t">
+                    <td colSpan={4} className="px-3 py-2 text-right font-semibold text-sm">Total Biaya:</td>
+                    <td className="px-3 py-2 text-right font-bold text-sm text-primary">{formatRupiah(totalBiaya)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Catatan Bengkel */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Catatan Bengkel</Label>
+            <Textarea
+              className="mt-1"
+              placeholder="Tambahkan catatan untuk admin, keterangan perbaikan, dll..."
+              {...form.register('catatanBengkel')}
+              rows={4}
+            />
+          </div>
+
+          {/* Documents if any */}
+          {service?.documents && service.documents.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Dokumen yang sudah diupload</Label>
+              <div className="space-y-1">
+                {service.documents.map((doc) => (
+                  <div key={doc.id} className="flex items-center gap-2 text-xs p-1.5 rounded bg-muted/50">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="truncate">{doc.fileName}</span>
+                    <Badge variant="secondary" className="text-[10px] px-1 py-0">{doc.jenisDokumen}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            Batal
+          </Button>
+          <Button
+            onClick={handleKirimPengajuan}
+            disabled={isSubmitting}
+            className="gap-2 bg-cyan-600 hover:bg-cyan-700 text-white"
+          >
+            {isSubmitting && <RefreshCw className="h-4 w-4 animate-spin" />}
+            <Send className="h-4 w-4" />
+            Kirim Pengajuan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ========== Bengkel Progress Dialog (DISETUJUI/DIPROSES - update progress / mark as selesai) ==========
+interface BengkelProgressDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  service: Service | null
+  onSubmit: (data: { progress: number; catatanBengkel?: string; markAsSelesai?: boolean }) => void
+  isSubmitting: boolean
+}
+
+function BengkelProgressDialog({ open, onOpenChange, service, onSubmit, isSubmitting }: BengkelProgressDialogProps) {
   const [progress, setProgress] = useState(service?.progress || 0)
   const [catatanBengkel, setCatatanBengkel] = useState(service?.catatanBengkel || '')
   const [markAsSelesai, setMarkAsSelesai] = useState(false)
-  const [notaFiles, setNotaFiles] = useState<File[]>([])
+  // Note: Component remounts via key prop when service changes, so initial values are correct
 
-  const handleSave = () => {
-    if (markAsSelesai) {
-      onSubmit({ progress: 100, catatanBengkel, markAsSelesai: true })
-    } else {
-      onSubmit({ progress, catatanBengkel })
-    }
+  const handleUpdateProgress = () => {
+    onSubmit({ progress, catatanBengkel, markAsSelesai: false })
   }
 
-  // Upload nota files if any
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files) {
-      setNotaFiles(Array.from(files))
-    }
-  }
-
-  const uploadNotaFiles = async () => {
-    if (notaFiles.length === 0 || !service) return
-    const formData = new FormData()
-    notaFiles.forEach((file) => formData.append('files', file))
-    formData.append('jenisDokumen', 'NOTA')
-    try {
-      const res = await fetch(`/api/service/${service.id}/documents`, {
-        method: 'POST',
-        body: formData,
-      })
-      if (res.ok) {
-        toast({ title: 'Berhasil', description: 'Nota berhasil diupload' })
-        setNotaFiles([])
-      } else {
-        toast({ title: 'Gagal', description: 'Gagal mengupload nota', variant: 'destructive' })
-      }
-    } catch {
-      toast({ title: 'Gagal', description: 'Gagal mengupload nota', variant: 'destructive' })
-    }
+  const handleTandaiSelesai = () => {
+    onSubmit({ progress: 100, catatanBengkel, markAsSelesai: true })
   }
 
   return (
@@ -1806,7 +2272,7 @@ function BengkelEditDialog({ open, onOpenChange, service, onSubmit, isSubmitting
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wrench className="h-5 w-5" />
+            <RefreshCw className="h-5 w-5" />
             Update Progress Service
           </DialogTitle>
           <DialogDescription>
@@ -1829,12 +2295,13 @@ function BengkelEditDialog({ open, onOpenChange, service, onSubmit, isSubmitting
 
           {/* Progress Slider */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Progress: {progress}%</Label>
+            <Label className="text-sm font-medium">Progress: {markAsSelesai ? 100 : progress}%</Label>
             <Slider
-              value={[progress]}
+              value={[markAsSelesai ? 100 : progress]}
               onValueChange={(v) => {
-                setProgress(v[0])
-                if (v[0] < 100) setMarkAsSelesai(false)
+                if (!markAsSelesai) {
+                  setProgress(v[0])
+                }
               }}
               max={100}
               step={5}
@@ -1856,54 +2323,12 @@ function BengkelEditDialog({ open, onOpenChange, service, onSubmit, isSubmitting
             />
           </div>
 
-          {/* Upload Nota */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Upload Nota / Dokumen</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="file"
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                onChange={handleFileChange}
-                className="text-sm"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={uploadNotaFiles}
-                disabled={notaFiles.length === 0}
-                className="shrink-0 gap-1"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Upload
-              </Button>
-            </div>
-            {notaFiles.length > 0 && (
-              <div className="text-xs text-muted-foreground">
-                {notaFiles.length} file dipilih
-              </div>
-            )}
-            {service?.documents && service.documents.length > 0 && (
-              <div className="mt-2 space-y-1">
-                <p className="text-xs text-muted-foreground">Dokumen yang sudah diupload:</p>
-                {service.documents.map((doc) => (
-                  <div key={doc.id} className="flex items-center gap-2 text-xs p-1.5 rounded bg-muted/50">
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="truncate">{doc.fileName}</span>
-                    <Badge variant="secondary" className="text-[10px] px-1 py-0">{doc.jenisDokumen}</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Mark as Selesai */}
           <div className="rounded-lg border-2 border-dashed border-amber-300 bg-amber-50/50 p-4 space-y-3">
             <div className="flex items-start gap-3">
               <input
                 type="checkbox"
-                id="markAsSelesai"
+                id="bengkel-markAsSelesai"
                 checked={markAsSelesai}
                 onChange={(e) => {
                   setMarkAsSelesai(e.target.checked)
@@ -1912,7 +2337,7 @@ function BengkelEditDialog({ open, onOpenChange, service, onSubmit, isSubmitting
                 className="mt-1 h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
               />
               <div>
-                <Label htmlFor="markAsSelesai" className="text-sm font-semibold text-amber-800 cursor-pointer">
+                <Label htmlFor="bengkel-markAsSelesai" className="text-sm font-semibold text-amber-800 cursor-pointer">
                   Tandai Selesai & Ajukan Persetujuan
                 </Label>
                 <p className="text-xs text-amber-600 mt-0.5">
@@ -1922,21 +2347,38 @@ function BengkelEditDialog({ open, onOpenChange, service, onSubmit, isSubmitting
             </div>
             {markAsSelesai && (
               <div className="rounded-md bg-amber-100 border border-amber-200 p-2.5 text-sm text-amber-800">
-                <strong>Perhatian:</strong> Setelah ditandai selesai, status service akan berubah menjadi <Badge className="text-xs border bg-amber-100 text-amber-800 border-amber-200">Menunggu Persetujuan</Badge> dan menunggu persetujuan dari admin.
+                <strong>Perhatian:</strong> Setelah ditandai selesai, status service akan berubah menjadi{' '}
+                <Badge className="text-xs border bg-amber-100 text-amber-800 border-amber-200">Menunggu Persetujuan</Badge>{' '}
+                dan menunggu persetujuan dari admin.
               </div>
             )}
           </div>
         </div>
+
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             Batal
           </Button>
-          <Button onClick={handleSave} disabled={isSubmitting} className="gap-2">
-            {isSubmitting && <RefreshCw className="h-4 w-4 animate-spin" />}
-            {markAsSelesai ? 'Ajukan Persetujuan' : 'Simpan Progress'}
-          </Button>
+          {markAsSelesai ? (
+            <Button
+              onClick={handleTandaiSelesai}
+              disabled={isSubmitting}
+              className="gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {isSubmitting && <RefreshCw className="h-4 w-4 animate-spin" />}
+              <CheckCircle className="h-4 w-4" />
+              Tandai Selesai
+            </Button>
+          ) : (
+            <Button onClick={handleUpdateProgress} disabled={isSubmitting} className="gap-2">
+              {isSubmitting && <RefreshCw className="h-4 w-4 animate-spin" />}
+              Update Progress
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
+
+export default ServicePage

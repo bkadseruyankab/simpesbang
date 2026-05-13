@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+type RouteContext = { params: Promise<{ id: string }> }
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: RouteContext
 ) {
   try {
-    const { id } = await params
+    const { id } = await context.params
     const workshop = await db.workshop.findUnique({
       where: { id },
       include: {
@@ -62,12 +64,12 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: RouteContext
 ) {
   try {
-    const { id } = await params
+    const { id } = await context.params
     const body = await request.json()
-    const { namaBengkel, alamat, noTelepon, picBengkel, email, statusAktif } = body
+    const { namaBengkel, alamat, noTelepon, picBengkel, email, statusAktif, canAddService } = body
 
     const existing = await db.workshop.findUnique({ where: { id } })
     if (!existing) {
@@ -83,6 +85,7 @@ export async function PUT(
         picBengkel: picBengkel !== undefined ? picBengkel : existing.picBengkel,
         email: email !== undefined ? email : existing.email,
         statusAktif: statusAktif !== undefined ? statusAktif : existing.statusAktif,
+        canAddService: canAddService !== undefined ? canAddService : existing.canAddService,
       },
     })
 
@@ -95,10 +98,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: RouteContext
 ) {
   try {
-    const { id } = await params
+    const { id } = await context.params
 
     const existing = await db.workshop.findUnique({
       where: { id },

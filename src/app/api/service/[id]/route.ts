@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { sendNotificationToAdmins } from '@/lib/notifications'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 // PUT /api/service/[id] - Update service
+// Allowed statuses: DIAJUKAN (admin/bengkel edit), DITOLAK (bengkel can fix and resubmit)
 export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
@@ -43,13 +45,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Service tidak ditemukan' }, { status: 404 })
     }
 
-    // Only allow editing for DIAJUKAN status
+    // Allow editing for DIAJUKAN and DITOLAK status
+    // DITOLAK: bengkel can fix and resubmit their pengajuan
     if (existingService.statusService !== 'DIAJUKAN' && existingService.statusService !== 'DITOLAK') {
       return NextResponse.json(
         { error: 'Service hanya dapat diedit pada status DIAJUKAN atau DITOLAK' },
         { status: 400 }
       )
     }
+
+    const wasDitolak = existingService.statusService === 'DITOLAK'
 
     const {
       tanggalService,
@@ -88,7 +93,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         totalBiaya,
         estimasiLamaPerbaikan: estimasiLamaPerbaikan !== undefined ? estimasiLamaPerbaikan : undefined,
         prioritas: prioritas || undefined,
+        // When editing after DITOLAK, reset to DIAJUKAN so bengkel can resubmit via "Kirim Pengajuan"
         statusService: 'DIAJUKAN',
+        rejectedReason: wasDitolak ? null : undefined,
         items: items
           ? {
               create: items.map((item: { itemName: string; quantity: number; hargaSatuan: number; keterangan?: string }) => ({
@@ -109,14 +116,26 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     })
 
     // Create history
+    const historyKeterangan = wasDitolak
+      ? 'Service diperbarui setelah penolakan, menunggu pengajuan ulang dari bengkel'
+      : 'Service diperbarui'
     await db.serviceHistory.create({
       data: {
         serviceId: id,
         vehicleId: service.vehicleId,
         status: 'DIAJUKAN',
-        keterangan: 'Service diperbarui',
+        keterangan: historyKeterangan,
       },
     })
+
+    // If service was previously DITOLAK and now being revised, notify admins
+    if (wasDitolak) {
+      await sendNotificationToAdmins(
+        'Service Diperbarui Setelah Penolakan',
+        `Service ${service.nomorService} yang sebelumnya ditolak telah diperbarui oleh bengkel dan menunggu pengajuan ulang.`,
+        'INFO',
+      )
+    }
 
     return NextResponse.json({ data: service })
   } catch (error) {

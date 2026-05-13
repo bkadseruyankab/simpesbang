@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { namaBengkel, alamat, noTelepon, picBengkel, email, statusAktif } = body
+    const { namaBengkel, alamat, noTelepon, picBengkel, email, statusAktif, canAddService } = body
 
     if (!namaBengkel) {
       return NextResponse.json({ error: 'Nama bengkel wajib diisi' }, { status: 400 })
@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
         picBengkel: picBengkel || null,
         email: email || null,
         statusAktif: statusAktif !== undefined ? statusAktif : true,
+        canAddService: canAddService !== undefined ? canAddService : false,
       },
     })
 

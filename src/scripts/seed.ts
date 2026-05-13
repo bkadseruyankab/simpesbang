@@ -33,6 +33,7 @@ async function main() {
       picBengkel: 'Hadi Sutrisno',
       email: 'info@jaya-makmur.co.id',
       statusAktif: true,
+      canAddService: false,
     },
   })
 
@@ -44,6 +45,7 @@ async function main() {
       picBengkel: 'Budi Prasetyo',
       email: 'service@nusantara-auto.co.id',
       statusAktif: true,
+      canAddService: true,
     },
   })
 
@@ -55,6 +57,7 @@ async function main() {
       picBengkel: 'Agus Wijaya',
       email: 'cs@tunas-dwipa.co.id',
       statusAktif: true,
+      canAddService: false,
     },
   })
 
@@ -486,11 +489,12 @@ async function main() {
       keterangan: 'Ganti ban dan kampas rem',
       kilometerService: 18000,
       estimasiBiaya: 1200000,
-      totalBiaya: 0,
-      statusService: 'DIAJUKAN',
+      totalBiaya: 1080000,
+      statusService: 'PENGAJUAN',
       prioritas: 'NORMAL',
       estimasiLamaPerbaikan: 2,
       progress: 0,
+      catatanBengkel: 'Item sudah ditambahkan, menunggu persetujuan admin',
     },
   })
 
@@ -516,6 +520,68 @@ async function main() {
   })
 
   console.log('✅ 10 Service dibuat')
+
+  // Additional services for new workflow states
+  const service11 = await prisma.service.create({
+    data: {
+      nomorService: 'SVC-2025-008',
+      tanggalService: monthsAgo(0),
+      vehicleId: vehicle4.id,
+      bengkelId: workshop1.id,
+      jenisService: 'PERBAIKAN',
+      keterangan: 'Klakson mati, lampu utama redup',
+      kilometerService: 67000,
+      estimasiBiaya: 950000,
+      totalBiaya: 0,
+      statusService: 'DIAJUKAN',
+      prioritas: 'NORMAL',
+      estimasiLamaPerbaikan: 2,
+      progress: 0,
+    },
+  })
+
+  const service12 = await prisma.service.create({
+    data: {
+      nomorService: 'SVC-2025-009',
+      tanggalService: monthsAgo(1),
+      vehicleId: vehicle5.id,
+      bengkelId: workshop3.id,
+      jenisService: 'PERBAIKAN',
+      keterangan: 'Servis ringan, ganti oli dan filter',
+      kilometerService: 11500,
+      estimasiBiaya: 750000,
+      totalBiaya: 680000,
+      statusService: 'MENUNGGU_PERSETUJUAN',
+      prioritas: 'NORMAL',
+      estimasiLamaPerbaikan: 1,
+      progress: 100,
+      approvedBy: userAdmin.id,
+      approvedAt: monthsAgo(1),
+      catatanBengkel: 'Service selesai, semua komponen sudah diganti',
+    },
+  })
+
+  const service13 = await prisma.service.create({
+    data: {
+      nomorService: 'SVC-2025-010',
+      tanggalService: monthsAgo(0),
+      vehicleId: vehicle3.id,
+      bengkelId: workshop3.id,
+      jenisService: 'PERBAIKAN',
+      keterangan: 'Rantai dan gir aus',
+      kilometerService: 33000,
+      estimasiBiaya: 600000,
+      totalBiaya: 550000,
+      statusService: 'DITOLAK',
+      prioritas: 'NORMAL',
+      estimasiLamaPerbaikan: 1,
+      progress: 0,
+      rejectedReason: 'Harga pengajuan terlalu tinggi, mohon revisi item service',
+      catatanBengkel: 'Rantai dan gir perlu diganti segera',
+    },
+  })
+
+  console.log('✅ 13 Service dibuat (termasuk workflow PENGAJUAN, MENUNGGU_PERSETUJUAN, DITOLAK)')
 
   // ==================== SERVICE ITEMS ====================
   const serviceItems = [
@@ -563,7 +629,7 @@ async function main() {
     { serviceId: service8.id, itemName: 'Klep & Valve Seal', quantity: 1, hargaSatuan: 800000, totalHarga: 800000, keterangan: 'Set klep + seal' },
     { serviceId: service8.id, itemName: 'Jasa Service', quantity: 1, hargaSatuan: 2500000, totalHarga: 2500000, keterangan: 'Biaya overhaul mesin' },
 
-    // Service 9 - Beat (DIAJUKAN)
+    // Service 9 - Beat (now PENGAJUAN)
     { serviceId: service9.id, itemName: 'Ban Depan', quantity: 1, hargaSatuan: 350000, totalHarga: 350000, keterangan: 'IRC NR91' },
     { serviceId: service9.id, itemName: 'Ban Belakang', quantity: 1, hargaSatuan: 380000, totalHarga: 380000, keterangan: 'IRC NR91' },
     { serviceId: service9.id, itemName: 'Kampas Rem', quantity: 1, hargaSatuan: 150000, totalHarga: 150000, keterangan: 'Kampas rem depan' },
@@ -573,6 +639,18 @@ async function main() {
     { serviceId: service10.id, itemName: 'Aki GS Astra', quantity: 1, hargaSatuan: 450000, totalHarga: 450000, keterangan: 'MF 12V 5Ah' },
     { serviceId: service10.id, itemName: 'Starter Motor', quantity: 1, hargaSatuan: 650000, totalHarga: 650000, keterangan: 'Starter motor Honda' },
     { serviceId: service10.id, itemName: 'Jasa Service', quantity: 1, hargaSatuan: 300000, totalHarga: 300000 },
+
+    // Service 12 (MENUNGGU_PERSETUJUAN) - NMAX servis ringan
+    { serviceId: service12.id, itemName: 'Ganti Oli Mesin', quantity: 1, hargaSatuan: 180000, totalHarga: 180000, keterangan: 'Yamalube' },
+    { serviceId: service12.id, itemName: 'Filter Oli', quantity: 1, hargaSatuan: 80000, totalHarga: 80000 },
+    { serviceId: service12.id, itemName: 'Busi NGK', quantity: 1, hargaSatuan: 45000, totalHarga: 45000 },
+    { serviceId: service12.id, itemName: 'Jasa Service', quantity: 1, hargaSatuan: 150000, totalHarga: 150000 },
+
+    // Service 13 (DITOLAK) - Supra rantai dan gir
+    { serviceId: service13.id, itemName: 'Rantai', quantity: 1, hargaSatuan: 200000, totalHarga: 200000, keterangan: 'Rantai 428H' },
+    { serviceId: service13.id, itemName: 'Gir Depan', quantity: 1, hargaSatuan: 120000, totalHarga: 120000 },
+    { serviceId: service13.id, itemName: 'Gir Belakang', quantity: 1, hargaSatuan: 150000, totalHarga: 150000 },
+    { serviceId: service13.id, itemName: 'Jasa Service', quantity: 1, hargaSatuan: 80000, totalHarga: 80000 },
   ]
 
   for (const item of serviceItems) {
@@ -590,7 +668,17 @@ async function main() {
     { serviceId: service6.id, vehicleId: vehicle1.id, status: 'DIAJUKAN', keterangan: 'Darurat: radiator bocor', changedBy: userAdmin.id },
     { serviceId: service6.id, vehicleId: vehicle1.id, status: 'DISETUJUI', keterangan: 'Disetujui segera', changedBy: userSuperAdmin.id },
     { serviceId: service6.id, vehicleId: vehicle1.id, status: 'DIPROSES', keterangan: 'Sedang dikerjakan', changedBy: userBengkel.id },
-    { serviceId: service9.id, vehicleId: vehicle7.id, status: 'DIAJUKAN', keterangan: 'Service rutin diajukan', changedBy: userAdmin.id },
+    { serviceId: service9.id, vehicleId: vehicle7.id, status: 'DIAJUKAN', keterangan: 'Service rutin diajukan oleh admin', changedBy: userAdmin.id },
+    { serviceId: service9.id, vehicleId: vehicle7.id, status: 'PENGAJUAN', keterangan: 'Bengkel mengirim pengajuan item service', changedBy: userBengkel2.id },
+    { serviceId: service11.id, vehicleId: vehicle4.id, status: 'DIAJUKAN', keterangan: 'Service baru diajukan oleh admin', changedBy: userAdmin.id },
+    { serviceId: service12.id, vehicleId: vehicle5.id, status: 'DIAJUKAN', keterangan: 'Service diajukan', changedBy: userAdmin.id },
+    { serviceId: service12.id, vehicleId: vehicle5.id, status: 'PENGAJUAN', keterangan: 'Bengkel mengirim pengajuan', changedBy: userBengkel2.id },
+    { serviceId: service12.id, vehicleId: vehicle5.id, status: 'DISETUJUI', keterangan: 'Pengajuan disetujui admin', changedBy: userAdmin.id },
+    { serviceId: service12.id, vehicleId: vehicle5.id, status: 'DIPROSES', keterangan: 'Sedang dikerjakan', changedBy: userBengkel2.id },
+    { serviceId: service12.id, vehicleId: vehicle5.id, status: 'MENUNGGU_PERSETUJUAN', keterangan: 'Bengkel menandai selesai', changedBy: userBengkel2.id },
+    { serviceId: service13.id, vehicleId: vehicle3.id, status: 'DIAJUKAN', keterangan: 'Service diajukan', changedBy: userAdmin.id },
+    { serviceId: service13.id, vehicleId: vehicle3.id, status: 'PENGAJUAN', keterangan: 'Bengkel mengirim pengajuan', changedBy: userBengkel2.id },
+    { serviceId: service13.id, vehicleId: vehicle3.id, status: 'DITOLAK', keterangan: 'Harga pengajuan terlalu tinggi, mohon revisi', changedBy: userAdmin.id },
   ]
 
   for (const h of serviceHistories) {
@@ -628,6 +716,11 @@ async function main() {
     { userId: userAdmin.id, title: 'Service Terlambat', message: 'Service kendaraan D 0123 OP (Daihatsu Gran Max) melebihi estimasi waktu perbaikan', type: 'WARNING', isRead: false },
     { userId: userPimpinan.id, title: 'Laporan Bulanan Tersedia', message: 'Laporan pengeluaran service bulan ini sudah bisa diakses', type: 'INFO', isRead: false },
     { userId: userPimpinan.id, title: 'Anggaran Mendekati Batas', message: 'Anggaran kendaraan D 0123 OP tahun 2025 telah terpakai lebih dari 90%', type: 'WARNING', isRead: false },
+    // New workflow notifications
+    { userId: userBengkel.id, title: 'Service Baru Ditugaskan', message: 'Service baru untuk kendaraan D 3456 GH (Suzuki Ertiga) telah ditugaskan ke bengkel Anda. Silakan tambah item dan kirim pengajuan.', type: 'INFO', isRead: false },
+    { userId: userBengkel2.id, title: 'Pengajuan Service Ditolak', message: 'Pengajuan service SVC-2025-010 (D 9012 EF) ditolak. Alasan: Harga pengajuan terlalu tinggi. Silakan revisi dan ajukan kembali.', type: 'ERROR', isRead: false },
+    { userId: userAdmin.id, title: 'Pengajuan Service Baru', message: 'Bengkel Honda Tunas Dwipa mengirim pengajuan untuk service SVC-2025-006. Silakan review dan setujui/tolak.', type: 'WARNING', isRead: false },
+    { userId: userAdmin.id, title: 'Service Menunggu Persetujuan', message: 'Service SVC-2025-009 (D 7890 IJ) telah selesai dikerjakan bengkel dan menunggu persetujuan Anda.', type: 'WARNING', isRead: false },
   ]
 
   for (const n of notifications) {

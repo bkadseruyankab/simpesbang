@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { sendNotificationToBengkel } from '@/lib/notifications'
 
 // GET /api/service - List services with pagination, search, and filters
 export async function GET(request: NextRequest) {
@@ -205,6 +206,14 @@ export async function POST(request: NextRequest) {
         keterangan: 'Service baru diajukan',
       },
     })
+
+    // Send notification to bengkel users about the new service assignment
+    await sendNotificationToBengkel(
+      bengkelId,
+      'Service Baru Ditugaskan',
+      `Service ${nomorService} untuk kendaraan ${service.vehicle?.nomorPolisi || '-'} telah ditugaskan ke bengkel Anda. Silakan proses pengajuan.`,
+      'INFO',
+    )
 
     return NextResponse.json({ data: service }, { status: 201 })
   } catch (error) {

@@ -103,11 +103,23 @@ export async function GET(request: NextRequest) {
     const totalKendaraanRoda2 = filteredVehicles.filter(v => v.jenisKendaraan === 'RODA_2').length
     const totalKendaraanRoda4 = filteredVehicles.filter(v => v.jenisKendaraan === 'RODA_4').length
 
-    // Service stats
+    // Service stats — PENGAJUAN is now included in the active service count
     const kendaraanAktifService = services.filter(s =>
-      ['DIAJUKAN', 'DISETUJUI', 'DIPROSES'].includes(s.statusService)
+      ['DIAJUKAN', 'PENGAJUAN', 'DISETUJUI', 'DIPROSES'].includes(s.statusService)
     ).length
     const kendaraanSelesaiService = services.filter(s => s.statusService === 'SELESAI').length
+
+    // Per-status counts for bengkel dashboard
+    const statusCounts = {
+      diajukan: services.filter(s => s.statusService === 'DIAJUKAN').length,
+      pengajuan: services.filter(s => s.statusService === 'PENGAJUAN').length,
+      disetujui: services.filter(s => s.statusService === 'DISETUJUI').length,
+      ditolak: services.filter(s => s.statusService === 'DITOLAK').length,
+      diproses: services.filter(s => s.statusService === 'DIPROSES').length,
+      menungguPersetujuan: services.filter(s => s.statusService === 'MENUNGGU_PERSETUJUAN').length,
+      selesai: services.filter(s => s.statusService === 'SELESAI').length,
+      pending: services.filter(s => s.statusService === 'PENDING').length,
+    }
 
     // Budget stats
     const totalAnggaran = budgets.reduce((s, b) => s + b.totalAnggaran, 0)
@@ -181,9 +193,9 @@ export async function GET(request: NextRequest) {
         hariTerlambat: Math.ceil((new Date().getTime() - new Date(s.tanggalService).getTime()) / (1000 * 60 * 60 * 24)),
       }))
 
-    // In-progress services
+    // In-progress services — include PENGAJUAN so bengkel sees their submissions
     const progressPerbaikan = services
-      .filter(s => ['DIPROSES', 'DISETUJUI'].includes(s.statusService))
+      .filter(s => ['DIPROSES', 'DISETUJUI', 'PENGAJUAN'].includes(s.statusService))
       .slice(0, 5)
       .map(s => ({
         id: s.id,
@@ -224,6 +236,9 @@ export async function GET(request: NextRequest) {
       totalAnggaranTahun: totalAnggaran,
       totalAnggaranTerpakai,
       sisaAnggaran,
+
+      // Per-status breakdown (useful for bengkel dashboard)
+      statusCounts,
 
       // Charts & lists
       pengeluaranBulanan,

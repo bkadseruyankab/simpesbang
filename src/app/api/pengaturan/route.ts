@@ -8,6 +8,14 @@ export async function GET() {
     settings.forEach(s => {
       settingsMap[s.key] = s.value || ''
     })
+
+    // Backward compatibility: bengkel_can_create_service is now per-bengkel
+    // (via Workshop.canAddService), but we still expose the global setting
+    // for the UI. If it doesn't exist yet, default to 'false'.
+    if (!settingsMap.bengkel_can_create_service) {
+      settingsMap.bengkel_can_create_service = 'false'
+    }
+
     return NextResponse.json(settingsMap)
   } catch (error) {
     console.error('Error fetching settings:', error)
@@ -19,6 +27,13 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
     const { settings } = body as { settings: Record<string, string> }
+
+    // Handle backward compatibility for bengkel_can_create_service:
+    // The global setting is kept for reference, but the actual permission
+    // is now per-bengkel via Workshop.canAddService.
+    // If the global setting is changed, we do NOT automatically update
+    // all workshops — the admin should toggle each workshop individually.
+    // However, we still persist the global setting so the UI can show it.
 
     const updates = Object.entries(settings).map(([key, value]) =>
       db.systemSetting.upsert({

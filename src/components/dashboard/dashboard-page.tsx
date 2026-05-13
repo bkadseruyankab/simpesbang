@@ -198,33 +198,33 @@ export function DashboardPage() {
         {isBengkel ? (
           <>
             <StatCard
-              title="Service Aktif"
-              value={stats.kendaraanAktifService || 0}
+              title="Perlu Ditindaklanjuti"
+              value={(stats.statusCounts?.diajukan || 0) + (stats.statusCounts?.ditolak || 0)}
               icon={Wrench}
               gradient="bg-gradient-to-br from-amber-500 to-orange-600"
-              subtitle="Sedang diproses"
-            />
-            <StatCard
-              title="Service Selesai"
-              value={stats.kendaraanSelesaiService || 0}
-              icon={CheckCircle2}
-              gradient="bg-gradient-to-br from-emerald-500 to-green-600"
-              subtitle="Perbaikan selesai"
-              trend="up"
+              subtitle="Diajukan / Ditolak - Perlu pengajuan"
             />
             <StatCard
               title="Menunggu Persetujuan"
-              value={stats.progressPerbaikan?.filter((p: any) => p.statusService === 'DISETUJUI').length || 0}
+              value={(stats.statusCounts?.pengajuan || 0) + (stats.statusCounts?.menungguPersetujuan || 0)}
               icon={FileCheck}
-              gradient="bg-gradient-to-br from-blue-500 to-cyan-600"
-              subtitle="Siap dikerjakan"
+              gradient="bg-gradient-to-br from-cyan-500 to-blue-600"
+              subtitle="Menunggu approval admin"
             />
             <StatCard
-              title="Ditolak"
-              value={0}
-              icon={FileX}
-              gradient="bg-gradient-to-br from-red-500 to-pink-600"
-              subtitle="Perlu revisi"
+              title="Sedang Dikerjakan"
+              value={(stats.statusCounts?.disetujui || 0) + (stats.statusCounts?.diproses || 0)}
+              icon={Activity}
+              gradient="bg-gradient-to-br from-emerald-500 to-green-600"
+              subtitle="Siap dikerjakan / Dalam proses"
+              trend="up"
+            />
+            <StatCard
+              title="Selesai"
+              value={stats.statusCounts?.selesai || 0}
+              icon={CheckCircle2}
+              gradient="bg-gradient-to-br from-purple-500 to-pink-600"
+              subtitle="Perbaikan selesai"
             />
           </>
         ) : (

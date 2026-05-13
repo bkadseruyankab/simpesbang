@@ -6,7 +6,7 @@ export type StatusKendaraan = 'AKTIF' | 'NONAKTIF' | 'RUSAK'
 
 export type KondisiKendaraan = 'BAIK' | 'KURANG_BAIK' | 'RUSAK'
 
-export type StatusService = 'DIAJUKAN' | 'DISETUJUI' | 'DITOLAK' | 'DIPROSES' | 'PENDING' | 'SELESAI' | 'MENUNGGU_PERSETUJUAN'
+export type StatusService = 'DIAJUKAN' | 'PENGAJUAN' | 'DISETUJUI' | 'DITOLAK' | 'DIPROSES' | 'PENDING' | 'SELESAI' | 'MENUNGGU_PERSETUJUAN'
 
 export type JenisService = 'RUTIN' | 'PERBAIKAN' | 'DARURAT'
 
@@ -134,6 +134,7 @@ export interface Workshop {
   picBengkel?: string
   email?: string
   statusAktif: boolean
+  canAddService: boolean
   createdAt: string
   updatedAt: string
   services?: Service[]

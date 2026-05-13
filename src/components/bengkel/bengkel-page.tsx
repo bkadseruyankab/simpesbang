@@ -89,6 +89,7 @@ const bengkelSchema = z.object({
   picBengkel: z.string().optional().default(''),
   email: z.string().email('Format email tidak valid').optional().or(z.literal('')).default(''),
   statusAktif: z.boolean().default(true),
+  canAddService: z.boolean().default(false),
 })
 
 type BengkelFormValues = z.infer<typeof bengkelSchema>
@@ -183,6 +184,7 @@ export function BengkelPage() {
       picBengkel: '',
       email: '',
       statusAktif: true,
+      canAddService: false,
     },
   })
 
@@ -260,6 +262,7 @@ export function BengkelPage() {
       picBengkel: '',
       email: '',
       statusAktif: true,
+      canAddService: false,
     })
     setFormOpen(true)
   }
@@ -274,6 +277,7 @@ export function BengkelPage() {
       picBengkel: workshop.picBengkel || '',
       email: workshop.email || '',
       statusAktif: workshop.statusAktif,
+      canAddService: workshop.canAddService,
     })
     setFormOpen(true)
   }
@@ -370,6 +374,7 @@ export function BengkelPage() {
                       <TableHead>PIC</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Bisa Tambah Service</TableHead>
                       <TableHead className="text-center">Total Service</TableHead>
                       <TableHead className="w-28">Aksi</TableHead>
                     </TableRow>
@@ -384,6 +389,13 @@ export function BengkelPage() {
                         <TableCell>{workshop.picBengkel || '-'}</TableCell>
                         <TableCell>{workshop.email || '-'}</TableCell>
                         <TableCell>{getStatusBadge(workshop.statusAktif)}</TableCell>
+                        <TableCell className="text-center">
+                          {workshop.canAddService ? (
+                            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Ya</Badge>
+                          ) : (
+                            <Badge className="bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100">Tidak</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-center">
                           <Badge variant="secondary">{workshop._count?.services || 0}</Badge>
                         </TableCell>
@@ -524,6 +536,24 @@ export function BengkelPage() {
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="canAddService"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>Izinkan Bengkel Membuat Service</FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Aktifkan agar akun bengkel dapat menambahkan service baru
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => { setFormOpen(false); form.reset() }}>
                   Batal
@@ -576,10 +606,21 @@ export function BengkelPage() {
                   <CardTitle className="text-base">Informasi Bengkel</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                     <span className="font-semibold text-lg">{detail.namaBengkel}</span>
                     {getStatusBadge(detail.statusAktif)}
+                    {detail.canAddService ? (
+                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100 gap-1">
+                        <Wrench className="h-3 w-3" />
+                        Bisa Tambah Service
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100 gap-1">
+                        <Wrench className="h-3 w-3" />
+                        Tidak Bisa Tambah Service
+                      </Badge>
+                    )}
                   </div>
                   <Separator />
                   <div className="space-y-2 text-sm">

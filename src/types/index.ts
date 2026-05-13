@@ -97,6 +97,8 @@ export interface ServiceDocument {
   fileName: string
   filePath: string
   fileSize?: number
+  fileType?: string
+  jenisDokumen: string
   uploadedAt: string
 }
 
@@ -104,6 +106,7 @@ export interface Budget {
   id: string
   tahun: number
   vehicleId: string
+  jenisKendaraan: JenisKendaraan
   totalAnggaran: number
   realisasi: number
   sisaAnggaran: number

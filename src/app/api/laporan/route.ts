@@ -129,6 +129,46 @@ export async function GET(request: NextRequest) {
     const totalAnggaran = budgets.reduce((sum, b) => sum + b.totalAnggaran, 0)
     const totalRealisasi = budgets.reduce((sum, b) => sum + b.realisasi, 0)
 
+    // Budget breakdown by vehicle type
+    const budgetByType = {
+      RODA_2: {
+        totalAnggaran: budgets.filter(b => b.jenisKendaraan === 'RODA_2').reduce((sum, b) => sum + b.totalAnggaran, 0),
+        realisasi: budgets.filter(b => b.jenisKendaraan === 'RODA_2').reduce((sum, b) => sum + b.realisasi, 0),
+        sisaAnggaran: 0,
+        persentase: 0,
+        serviceCount: services.filter(s => s.vehicle.jenisKendaraan === 'RODA_2').length,
+        vehicleCount: budgets.filter(b => b.jenisKendaraan === 'RODA_2').length,
+      },
+      RODA_4: {
+        totalAnggaran: budgets.filter(b => b.jenisKendaraan === 'RODA_4').reduce((sum, b) => sum + b.totalAnggaran, 0),
+        realisasi: budgets.filter(b => b.jenisKendaraan === 'RODA_4').reduce((sum, b) => sum + b.realisasi, 0),
+        sisaAnggaran: 0,
+        persentase: 0,
+        serviceCount: services.filter(s => s.vehicle.jenisKendaraan === 'RODA_4').length,
+        vehicleCount: budgets.filter(b => b.jenisKendaraan === 'RODA_4').length,
+      },
+    }
+    budgetByType.RODA_2.sisaAnggaran = budgetByType.RODA_2.totalAnggaran - budgetByType.RODA_2.realisasi
+    budgetByType.RODA_2.persentase = budgetByType.RODA_2.totalAnggaran > 0
+      ? (budgetByType.RODA_2.realisasi / budgetByType.RODA_2.totalAnggaran) * 100
+      : 0
+    budgetByType.RODA_4.sisaAnggaran = budgetByType.RODA_4.totalAnggaran - budgetByType.RODA_4.realisasi
+    budgetByType.RODA_4.persentase = budgetByType.RODA_4.totalAnggaran > 0
+      ? (budgetByType.RODA_4.realisasi / budgetByType.RODA_4.totalAnggaran) * 100
+      : 0
+
+    // Monthly breakdown by vehicle type for chart
+    const monthlyByType: Record<string, { month: string; roda2: number; roda4: number }> = {}
+    services.forEach(s => {
+      const monthKey = new Date(s.tanggalService).toISOString().slice(0, 7)
+      if (!monthlyByType[monthKey]) monthlyByType[monthKey] = { month: monthKey, roda2: 0, roda4: 0 }
+      if (s.vehicle.jenisKendaraan === 'RODA_2') {
+        monthlyByType[monthKey].roda2 += s.totalBiaya
+      } else {
+        monthlyByType[monthKey].roda4 += s.totalBiaya
+      }
+    })
+
     return NextResponse.json({
       services,
       statistics: {
@@ -148,7 +188,10 @@ export async function GET(request: NextRequest) {
         vehicleTypeBreakdown,
         totalAnggaran,
         totalRealisasi,
+        sisaAnggaran: totalAnggaran - totalRealisasi,
         persentaseRealisasi: totalAnggaran > 0 ? (totalRealisasi / totalAnggaran) * 100 : 0,
+        budgetByType,
+        monthlyByType: Object.values(monthlyByType).sort((a, b) => a.month.localeCompare(b.month)),
       },
       filters: { type, year, month, dateFrom, dateTo, vehicleId, bengkelId, jenisKendaraan, statusService, jenisService },
     })

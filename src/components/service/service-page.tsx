@@ -8,7 +8,9 @@ import { z } from 'zod'
 import {
   Wrench, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle,
   XCircle, RefreshCw, ChevronLeft, ChevronRight, FileText,
-  AlertTriangle, Info, X, Wallet, CalendarIcon, ArrowUpDown
+  AlertTriangle, Info, X, Wallet, CalendarIcon, ArrowUpDown,
+  Upload, Download, Image as ImageIcon, CalendarDays, History,
+  Car, Gauge
 } from 'lucide-react'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -16,7 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -43,7 +45,8 @@ import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
 import { toast } from '@/hooks/use-toast'
-import type { Service, ServiceItem, BudgetValidation, StatusService, JenisService, Prioritas } from '@/types'
+import { MultiUpload } from '@/components/shared/multi-upload'
+import type { Service, ServiceItem, ServiceDocument, BudgetValidation, StatusService, JenisService, Prioritas } from '@/types'
 
 // ========== Types ==========
 interface ServiceFormData {
@@ -155,6 +158,8 @@ export function ServicePage() {
   const [progressService, setProgressService] = useState<Service | null>(null)
   const [showDetail, setShowDetail] = useState(false)
   const [detailService, setDetailService] = useState<Service | null>(null)
+  const [showUploadNota, setShowUploadNota] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [rejectReason, setRejectReason] = useState('')
 
   // Build query params
@@ -293,6 +298,58 @@ export function ServicePage() {
       toast({ title: 'Berhasil', description: 'Progress berhasil diupdate' })
       setShowProgress(false)
       setProgressService(null)
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Gagal', description: error.message, variant: 'destructive' })
+    },
+  })
+
+  // Upload Nota mutation
+  const uploadNotaMutation = useMutation({
+    mutationFn: async ({ serviceId, files, jenisDokumen }: { serviceId: string; files: File[]; jenisDokumen: string }) => {
+      const formData = new FormData()
+      files.forEach((file) => formData.append('files', file))
+      formData.append('jenisDokumen', jenisDokumen)
+
+      // Simulate progress
+      setUploadProgress(10)
+
+      const res = await fetch(`/api/service/${serviceId}/documents`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      setUploadProgress(80)
+
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Gagal mengupload nota') }
+      const result = await res.json()
+      setUploadProgress(100)
+      return result
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['service-detail', detailService?.id] })
+      queryClient.invalidateQueries({ queryKey: ['services'] })
+      toast({ title: 'Berhasil', description: 'Nota berhasil diupload' })
+      setShowUploadNota(false)
+      setUploadProgress(0)
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Gagal', description: error.message, variant: 'destructive' })
+      setUploadProgress(0)
+    },
+  })
+
+  // Delete document mutation
+  const deleteDocMutation = useMutation({
+    mutationFn: async ({ serviceId, docId }: { serviceId: string; docId: string }) => {
+      const res = await fetch(`/api/service/${serviceId}/documents/${docId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Gagal menghapus dokumen')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['service-detail', detailService?.id] })
+      queryClient.invalidateQueries({ queryKey: ['services'] })
+      toast({ title: 'Berhasil', description: 'Dokumen berhasil dihapus' })
     },
     onError: (error: Error) => {
       toast({ title: 'Gagal', description: error.message, variant: 'destructive' })
@@ -652,160 +709,358 @@ export function ServicePage() {
         isSubmitting={progressMutation.isPending}
       />
 
-      {/* Detail Sheet */}
+      {/* Detail Sheet - Modernized */}
       <Sheet open={showDetail} onOpenChange={setShowDetail}>
-        <SheetContent className="sm:max-w-xl w-full overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Detail Service</SheetTitle>
-            <SheetDescription>{detail?.nomorService}</SheetDescription>
-          </SheetHeader>
+        <SheetContent className="sm:max-w-xl w-full overflow-y-auto p-0">
           {detailLoading ? (
-            <div className="mt-6 space-y-3">
-              {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-6 w-full" />)}
+            <div className="p-6 space-y-3">
+              <Skeleton className="h-32 w-full" />
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
             </div>
           ) : detail ? (
-            <div className="mt-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <Badge className={cn('text-sm border px-3 py-1', STATUS_COLORS[detail.statusService as StatusService])}>
-                  {STATUS_LABELS[detail.statusService as StatusService]}
-                </Badge>
-                <span className="text-sm text-muted-foreground">Progress: {detail.progress}%</span>
-              </div>
-              <Progress value={detail.progress} className="h-2" />
-              <Separator />
-
-              {/* Basic Info */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-sm uppercase text-muted-foreground">Informasi Umum</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><span className="text-muted-foreground">Nomor Service</span><p className="font-mono font-medium">{detail.nomorService}</p></div>
-                  <div><span className="text-muted-foreground">Tanggal</span><p>{formatDate(detail.tanggalService)}</p></div>
-                  <div><span className="text-muted-foreground">Kendaraan</span><p className="font-medium">{detail.vehicle?.nomorPolisi}</p><p className="text-xs text-muted-foreground">{detail.vehicle?.merk} {detail.vehicle?.type}</p></div>
-                  <div><span className="text-muted-foreground">Bengkel</span><p className="font-medium">{detail.bengkel?.namaBengkel}</p></div>
-                  <div><span className="text-muted-foreground">Jenis Service</span><p>{detail.jenisService}</p></div>
-                  <div><span className="text-muted-foreground">Prioritas</span><p>{detail.prioritas}</p></div>
-                  <div><span className="text-muted-foreground">Kilometer</span><p>{detail.kilometerService?.toLocaleString('id-ID')} km</p></div>
-                  <div><span className="text-muted-foreground">Est. Lama Perbaikan</span><p>{detail.estimasiLamaPerbaikan ? `${detail.estimasiLamaPerbaikan} hari` : '-'}</p></div>
-                </div>
-                {detail.keterangan && (
-                  <div><span className="text-muted-foreground text-sm">Keterangan</span><p className="text-sm mt-1 rounded-md bg-muted p-2">{detail.keterangan}</p></div>
-                )}
-              </div>
-              <Separator />
-
-              {/* Items Table */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-sm uppercase text-muted-foreground">Item Service</h3>
-                {detail.items && detail.items.length > 0 ? (
-                  <div className="rounded-lg border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs">Item</TableHead>
-                          <TableHead className="text-xs text-center">Qty</TableHead>
-                          <TableHead className="text-xs text-right">Harga</TableHead>
-                          <TableHead className="text-xs text-right">Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {detail.items.map((item: ServiceItem) => (
-                          <TableRow key={item.id}>
-                            <TableCell className="text-sm">
-                              {item.itemName}
-                              {item.keterangan && <p className="text-xs text-muted-foreground">{item.keterangan}</p>}
-                            </TableCell>
-                            <TableCell className="text-sm text-center">{item.quantity}</TableCell>
-                            <TableCell className="text-sm text-right">{formatRupiah(item.hargaSatuan)}</TableCell>
-                            <TableCell className="text-sm text-right font-medium">{formatRupiah(item.totalHarga)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    <div className="border-t p-3 text-right font-semibold text-sm bg-muted/50">
-                      Total: {formatRupiah(detail.totalBiaya)}
+            <div className="flex flex-col">
+              {/* Gradient Header Banner */}
+              <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
+                      <Wrench className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold">Detail Service</h2>
+                      <p className="text-sm text-slate-300 font-mono">{detail.nomorService}</p>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Tidak ada item service</p>
-                )}
+                  <Badge className={cn('text-sm border px-3 py-1', STATUS_COLORS[detail.statusService as StatusService])}>
+                    {STATUS_LABELS[detail.statusService as StatusService]}
+                  </Badge>
+                </div>
+                {/* Progress bar with gradient */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-sm mb-1.5">
+                    <span className="text-slate-300">Progress</span>
+                    <span className="font-bold">{detail.progress}%</span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-white/20 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
+                      style={{ width: detail.progress + '%' }}
+                    />
+                  </div>
+                </div>
               </div>
-              <Separator />
 
-              {/* Approval Info */}
-              {(detail.approvedBy || detail.rejectedReason) && (
-                <>
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm uppercase text-muted-foreground">Persetujuan</h3>
-                    {detail.approvedBy && (
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Disetujui oleh:</span>{' '}
-                        <span className="font-medium">{detail.approvedBy}</span>
-                        {detail.approvedAt && <span className="text-muted-foreground ml-2">({formatDate(detail.approvedAt)})</span>}
-                      </div>
-                    )}
-                    {detail.rejectedReason && (
-                      <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
-                        <strong>Alasan Ditolak:</strong> {detail.rejectedReason}
-                      </div>
-                    )}
-                  </div>
-                  <Separator />
-                </>
-              )}
-
-              {/* Catatan Bengkel */}
-              {detail.catatanBengkel && (
-                <>
-                  <div className="space-y-2">
-                    <h3 className="font-semibold text-sm uppercase text-muted-foreground">Catatan Bengkel</h3>
-                    <p className="text-sm rounded-md bg-muted p-2">{detail.catatanBengkel}</p>
-                  </div>
-                  <Separator />
-                </>
-              )}
-
-              {/* History */}
-              {detail.history && detail.history.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-sm uppercase text-muted-foreground">Riwayat</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {detail.history.map((h: { id: string; status: string; keterangan: string | null; createdAt: string }) => (
-                      <div key={h.id} className="flex gap-3 text-sm">
-                        <div className="w-2 h-2 mt-1.5 rounded-full bg-primary shrink-0" />
+              <div className="p-6 space-y-6">
+                {/* General Info Card */}
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      Informasi Umum
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-start gap-2">
+                        <CalendarIcon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                         <div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">{h.status}</Badge>
-                            <span className="text-xs text-muted-foreground">{formatDate(h.createdAt)}</span>
-                          </div>
-                          <p className="text-muted-foreground text-xs mt-0.5">{h.keterangan}</p>
+                          <p className="text-xs text-muted-foreground">Tanggal Service</p>
+                          <p className="font-semibold">{formatDate(detail.tanggalService)}</p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Documents */}
-              {detail.documents && detail.documents.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm uppercase text-muted-foreground">Dokumen</h3>
-                    <div className="space-y-2">
-                      {detail.documents.map((doc) => (
-                        <div key={doc.id} className="flex items-center gap-2 text-sm rounded-md border p-2">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span className="flex-1 truncate">{doc.fileName}</span>
+                      <div className="flex items-start gap-2">
+                        <Car className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Kendaraan</p>
+                          <p className="font-semibold">{detail.vehicle?.nomorPolisi}</p>
+                          <p className="text-xs text-muted-foreground">{detail.vehicle?.merk} {detail.vehicle?.type}</p>
                         </div>
-                      ))}
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Wrench className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Bengkel</p>
+                          <p className="font-semibold">{detail.bengkel?.namaBengkel}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Jenis / Prioritas</p>
+                          <p className="font-semibold">{detail.jenisService} • {detail.prioritas}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Gauge className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Kilometer</p>
+                          <p className="font-semibold">{detail.kilometerService?.toLocaleString('id-ID')} km</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <CalendarDays className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Est. Lama Perbaikan</p>
+                          <p className="font-semibold">{detail.estimasiLamaPerbaikan ? detail.estimasiLamaPerbaikan + ' hari' : '-'}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </>
-              )}
+                    {detail.keterangan && (
+                      <div className="mt-3 p-2.5 rounded-lg bg-muted/50 text-sm">
+                        <p className="text-xs text-muted-foreground mb-0.5">Keterangan</p>
+                        <p>{detail.keterangan}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Items Table - Polished */}
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      Item Service
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {detail.items && detail.items.length > 0 ? (
+                      <div className="rounded-lg border overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-slate-50">
+                              <TableHead className="text-xs">Item</TableHead>
+                              <TableHead className="text-xs text-center">Qty</TableHead>
+                              <TableHead className="text-xs text-right">Harga</TableHead>
+                              <TableHead className="text-xs text-right">Total</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {detail.items.map((item: ServiceItem, idx: number) => (
+                              <TableRow key={item.id} className={idx % 2 === 1 ? 'bg-slate-50/50' : ''}>
+                                <TableCell className="text-sm">
+                                  {item.itemName}
+                                  {item.keterangan && <p className="text-xs text-muted-foreground">{item.keterangan}</p>}
+                                </TableCell>
+                                <TableCell className="text-sm text-center">{item.quantity}</TableCell>
+                                <TableCell className="text-sm text-right">{formatRupiah(item.hargaSatuan)}</TableCell>
+                                <TableCell className="text-sm text-right font-medium">{formatRupiah(item.totalHarga)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {/* Total Summary */}
+                        <div className="border-t p-3 bg-gradient-to-r from-slate-50 to-slate-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-muted-foreground">Total</span>
+                            <span className="text-lg font-bold">{formatRupiah(detail.totalBiaya)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Tidak ada item service</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Approval Info */}
+                {(detail.approvedBy || detail.rejectedReason) && (
+                  <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <div className="h-1 w-4 rounded-full bg-slate-700" />
+                        Persetujuan
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {detail.approvedBy && (
+                        <div className="flex items-center gap-2 text-sm mb-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span>Disetujui oleh <strong>{detail.approvedBy}</strong></span>
+                          {detail.approvedAt && <span className="text-muted-foreground">({formatDate(detail.approvedAt)})</span>}
+                        </div>
+                      )}
+                      {detail.rejectedReason && (
+                        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+                          <strong>Alasan Ditolak:</strong> {detail.rejectedReason}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Catatan Bengkel */}
+                {detail.catatanBengkel && (
+                  <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <div className="h-1 w-4 rounded-full bg-slate-700" />
+                        Catatan Bengkel
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm rounded-lg bg-muted/50 p-3">{detail.catatanBengkel}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* History - Timeline Style */}
+                {detail.history && detail.history.length > 0 && (
+                  <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <div className="h-1 w-4 rounded-full bg-slate-700" />
+                        <History className="h-4 w-4" />
+                        Riwayat
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative pl-6 max-h-48 overflow-y-auto">
+                        {/* Timeline line */}
+                        <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-slate-200" />
+                        <div className="space-y-4">
+                          {detail.history.map((h: { id: string; status: string; keterangan: string | null; createdAt: string }, idx: number) => (
+                            <div key={h.id} className="relative flex items-start gap-3">
+                              <div className={'absolute -left-4 mt-1 h-3 w-3 rounded-full border-2 border-white ' + (idx === 0 ? 'bg-slate-700' : 'bg-slate-300') + ' z-10'} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs">{h.status}</Badge>
+                                  <span className="text-xs text-muted-foreground">{formatDate(h.createdAt)}</span>
+                                </div>
+                                <p className="text-muted-foreground text-xs mt-0.5">{h.keterangan}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Documents Section */}
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <div className="h-1 w-4 rounded-full bg-slate-700" />
+                        <FileText className="h-4 w-4" />
+                        Dokumen
+                      </CardTitle>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => setShowUploadNota(true)}
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        Upload Nota
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {detail.documents && detail.documents.length > 0 ? (
+                      <div className="space-y-2">
+                        {detail.documents.map((doc: ServiceDocument) => {
+                          const ext = doc.fileName.split('.').pop()?.toLowerCase() || ''
+                          const extColors: Record<string, string> = {
+                            pdf: 'bg-red-100 text-red-700',
+                            doc: 'bg-blue-100 text-blue-700',
+                            docx: 'bg-blue-100 text-blue-700',
+                            xls: 'bg-emerald-100 text-emerald-700',
+                            xlsx: 'bg-emerald-100 text-emerald-700',
+                            jpg: 'bg-purple-100 text-purple-700',
+                            jpeg: 'bg-purple-100 text-purple-700',
+                            png: 'bg-purple-100 text-purple-700',
+                          }
+                          return (
+                            <div key={doc.id} className="flex items-center gap-3 text-sm p-2.5 rounded-lg border hover:bg-muted/50 transition-colors">
+                              <Badge variant="outline" className={'text-[10px] font-bold ' + (extColors[ext] || 'bg-gray-100 text-gray-700')}>
+                                .{ext.toUpperCase()}
+                              </Badge>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">{doc.fileName}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {doc.fileSize && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {doc.fileSize < 1024 ? doc.fileSize + ' B' : doc.fileSize < 1024 * 1024 ? (doc.fileSize / 1024).toFixed(1) + ' KB' : (doc.fileSize / (1024 * 1024)).toFixed(1) + ' MB'}
+                                    </span>
+                                  )}
+                                  {doc.jenisDokumen && (
+                                    <Badge variant="secondary" className={cn(
+                                      'text-[10px] px-1.5 py-0',
+                                      doc.jenisDokumen === 'NOTA' && 'bg-blue-100 text-blue-800',
+                                      doc.jenisDokumen === 'KWITANSI' && 'bg-green-100 text-green-800',
+                                      doc.jenisDokumen === 'FAKTUR' && 'bg-orange-100 text-orange-800',
+                                      doc.jenisDokumen === 'LAINNYA' && 'bg-gray-100 text-gray-800',
+                                    )}>
+                                      {doc.jenisDokumen}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="Download">
+                                  <a href={doc.filePath} download target="_blank" rel="noopener noreferrer">
+                                    <Download className="h-3.5 w-3.5" />
+                                  </a>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
+                                  onClick={() => deleteDocMutation.mutate({ serviceId: detail.id, docId: doc.id })}
+                                  disabled={deleteDocMutation.isPending}
+                                  title="Hapus"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+                        <FileText className="h-8 w-8 mb-2 opacity-30" />
+                        <p className="text-sm">Belum ada dokumen</p>
+                        <Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={() => setShowUploadNota(true)}>
+                          <Upload className="h-3.5 w-3.5" /> Upload Nota
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           ) : null}
         </SheetContent>
       </Sheet>
+
+      {/* Upload Nota Dialog */}
+      <Dialog open={showUploadNota} onOpenChange={setShowUploadNota}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Upload Nota / Dokumen
+            </DialogTitle>
+            <DialogDescription>
+              Upload nota, kwitansi, faktur, atau dokumen lainnya untuk service {detail?.nomorService}
+            </DialogDescription>
+          </DialogHeader>
+          <MultiUpload
+            onUpload={async (files, jenisDokumen) => {
+              if (!detailService?.id) return
+              await uploadNotaMutation.mutateAsync({
+                serviceId: detailService.id,
+                files,
+                jenisDokumen,
+              })
+            }}
+            isUploading={uploadNotaMutation.isPending}
+            progress={uploadProgress}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

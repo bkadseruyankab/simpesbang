@@ -57,7 +57,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { tahun, vehicleId, totalAnggaran, realisasi, statusAnggaran } = body
+    const { tahun, vehicleId, totalAnggaran, realisasi, statusAnggaran, jenisKendaraan } = body
 
     const existing = await db.budget.findUnique({ where: { id } })
     if (!existing) {
@@ -77,11 +77,22 @@ export async function PUT(
       finalStatus = 'AKTIF'
     }
 
+    // Auto-detect jenisKendaraan from vehicle if vehicleId changed
+    let finalJenisKendaraan = jenisKendaraan || existing.jenisKendaraan
+    if (vehicleId && vehicleId !== existing.vehicleId) {
+      const vehicle = await db.vehicle.findUnique({
+        where: { id: vehicleId },
+        select: { jenisKendaraan: true }
+      })
+      finalJenisKendaraan = vehicle?.jenisKendaraan || existing.jenisKendaraan
+    }
+
     const budget = await db.budget.update({
       where: { id },
       data: {
         ...(tahun !== undefined && { tahun: parseInt(tahun) }),
         ...(vehicleId !== undefined && { vehicleId }),
+        jenisKendaraan: finalJenisKendaraan,
         totalAnggaran: newTotalAnggaran,
         realisasi: newRealisasi,
         sisaAnggaran: parseFloat(sisaAnggaran.toFixed(2)),
@@ -93,6 +104,7 @@ export async function PUT(
             id: true,
             nomorPolisi: true,
             namaPengguna: true,
+            jenisKendaraan: true,
           }
         }
       }

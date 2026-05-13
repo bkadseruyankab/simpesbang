@@ -1,7 +1,8 @@
 'use client'
 
 import { useNavigationStore, type PageKey } from '@/store/navigation'
-import { Bell, Moon, Sun, Search, Menu } from 'lucide-react'
+import { useAuthStore } from '@/store/auth'
+import { Bell, Moon, Sun, Search, Menu, LogOut, User, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -30,9 +31,33 @@ const pageLabels: Record<PageKey, string> = {
   pengaturan: 'Pengaturan',
 }
 
+const roleLabels: Record<string, string> = {
+  SUPER_ADMIN: 'Super Administrator',
+  ADMIN: 'Administrator',
+  BENGKEL: 'Bengkel',
+  PIMPINAN: 'Pimpinan',
+}
+
+function getInitials(name: string): string {
+  const parts = name.split(' ').filter(p => p.length > 0)
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase()
+  }
+  return name.substring(0, 2).toUpperCase()
+}
+
 export function AppHeader() {
   const { currentPage, setSidebarOpen } = useNavigationStore()
+  const { user, logout } = useAuthStore()
   const { theme, setTheme } = useTheme()
+
+  const handleLogout = async () => {
+    await logout()
+  }
+
+  const userName = user?.name || 'Pengguna'
+  const userRole = user?.role || 'ADMIN'
+  const userInitials = getInitials(userName)
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
@@ -101,24 +126,36 @@ export function AppHeader() {
             <Button variant="ghost" className="gap-2 pl-2 pr-3">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                  SA
+                  {userInitials}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden md:flex flex-col items-start">
-                <span className="text-sm font-medium leading-none">Super Admin</span>
-                <span className="text-[10px] text-muted-foreground">Administrator</span>
+                <span className="text-sm font-medium leading-none">{userName}</span>
+                <span className="text-[10px] text-muted-foreground">{roleLabels[userRole] || userRole}</span>
               </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Akun Saya</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium leading-none">{userName}</p>
+                <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profil</DropdownMenuItem>
+            <DropdownMenuItem>
+              <User className="mr-2 h-4 w-4" />
+              Profil
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => useNavigationStore.getState().setCurrentPage('pengaturan')}>
+              <Settings className="mr-2 h-4 w-4" />
               Pengaturan
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">Keluar</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Keluar
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

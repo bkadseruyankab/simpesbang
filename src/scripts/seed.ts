@@ -65,7 +65,7 @@ async function main() {
     data: {
       email: 'superadmin@bkad.go.id',
       name: 'Dr. H. Ahmad Fauzi, M.Si',
-      password: '$2a$10$hashedpassword_superadmin',
+      password: 'admin123',
       role: 'SUPER_ADMIN',
       phone: '081234567890',
       isActive: true,
@@ -76,7 +76,7 @@ async function main() {
     data: {
       email: 'admin@bkad.go.id',
       name: 'Siti Nurhaliza, S.AP',
-      password: '$2a$10$hashedpassword_admin',
+      password: 'admin123',
       role: 'ADMIN',
       phone: '081234567891',
       isActive: true,
@@ -87,7 +87,7 @@ async function main() {
     data: {
       email: 'bengkel@jaya-makmur.co.id',
       name: 'Hadi Sutrisno',
-      password: '$2a$10$hashedpassword_bengkel',
+      password: 'bengkel123',
       role: 'BENGKEL',
       phone: '081234567892',
       bengkelId: workshop1.id,
@@ -255,19 +255,19 @@ async function main() {
   // ==================== BUDGETS ====================
   const currentYear = new Date().getFullYear()
   const budgets = [
-    { tahun: currentYear - 2, vehicleId: vehicle1.id, totalAnggaran: 15000000, realisasi: 12300000, sisaAnggaran: 2700000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear - 2, vehicleId: vehicle2.id, totalAnggaran: 18000000, realisasi: 15600000, sisaAnggaran: 2400000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear - 1, vehicleId: vehicle1.id, totalAnggaran: 20000000, realisasi: 4500000, sisaAnggaran: 15500000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear - 1, vehicleId: vehicle2.id, totalAnggaran: 22000000, realisasi: 3800000, sisaAnggaran: 18200000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear - 1, vehicleId: vehicle3.id, totalAnggaran: 8000000, realisasi: 3200000, sisaAnggaran: 4800000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear, vehicleId: vehicle1.id, totalAnggaran: 20000000, realisasi: 4500000, sisaAnggaran: 15500000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear, vehicleId: vehicle2.id, totalAnggaran: 22000000, realisasi: 3800000, sisaAnggaran: 18200000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear, vehicleId: vehicle3.id, totalAnggaran: 8000000, realisasi: 3200000, sisaAnggaran: 4800000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear, vehicleId: vehicle4.id, totalAnggaran: 15000000, realisasi: 7500000, sisaAnggaran: 7500000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear, vehicleId: vehicle5.id, totalAnggaran: 6000000, realisasi: 1500000, sisaAnggaran: 4500000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear, vehicleId: vehicle6.id, totalAnggaran: 25000000, realisasi: 8900000, sisaAnggaran: 16100000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear, vehicleId: vehicle7.id, totalAnggaran: 5000000, realisasi: 2500000, sisaAnggaran: 2500000, statusAnggaran: 'AKTIF' },
-    { tahun: currentYear, vehicleId: vehicle8.id, totalAnggaran: 12000000, realisasi: 11200000, sisaAnggaran: 800000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear - 2, vehicleId: vehicle1.id, jenisKendaraan: 'RODA_4', totalAnggaran: 15000000, realisasi: 12300000, sisaAnggaran: 2700000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear - 2, vehicleId: vehicle2.id, jenisKendaraan: 'RODA_4', totalAnggaran: 18000000, realisasi: 15600000, sisaAnggaran: 2400000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear - 1, vehicleId: vehicle1.id, jenisKendaraan: 'RODA_4', totalAnggaran: 20000000, realisasi: 4500000, sisaAnggaran: 15500000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear - 1, vehicleId: vehicle2.id, jenisKendaraan: 'RODA_4', totalAnggaran: 22000000, realisasi: 3800000, sisaAnggaran: 18200000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear - 1, vehicleId: vehicle3.id, jenisKendaraan: 'RODA_2', totalAnggaran: 8000000, realisasi: 3200000, sisaAnggaran: 4800000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear, vehicleId: vehicle1.id, jenisKendaraan: 'RODA_4', totalAnggaran: 20000000, realisasi: 4500000, sisaAnggaran: 15500000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear, vehicleId: vehicle2.id, jenisKendaraan: 'RODA_4', totalAnggaran: 22000000, realisasi: 3800000, sisaAnggaran: 18200000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear, vehicleId: vehicle3.id, jenisKendaraan: 'RODA_2', totalAnggaran: 8000000, realisasi: 3200000, sisaAnggaran: 4800000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear, vehicleId: vehicle4.id, jenisKendaraan: 'RODA_4', totalAnggaran: 15000000, realisasi: 7500000, sisaAnggaran: 7500000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear, vehicleId: vehicle5.id, jenisKendaraan: 'RODA_2', totalAnggaran: 6000000, realisasi: 1500000, sisaAnggaran: 4500000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear, vehicleId: vehicle6.id, jenisKendaraan: 'RODA_4', totalAnggaran: 25000000, realisasi: 8900000, sisaAnggaran: 16100000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear, vehicleId: vehicle7.id, jenisKendaraan: 'RODA_2', totalAnggaran: 5000000, realisasi: 2500000, sisaAnggaran: 2500000, statusAnggaran: 'AKTIF' },
+    { tahun: currentYear, vehicleId: vehicle8.id, jenisKendaraan: 'RODA_4', totalAnggaran: 12000000, realisasi: 11200000, sisaAnggaran: 800000, statusAnggaran: 'AKTIF' },
   ]
 
   for (const b of budgets) {

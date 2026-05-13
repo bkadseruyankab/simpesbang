@@ -7,7 +7,8 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Plus, Search, Filter, Edit2, Trash2, Eye, Download, Upload,
-  X, FileText, Bike, Car, ChevronLeft, ChevronRight, MoreHorizontal
+  X, FileText, Bike, Car, ChevronLeft, ChevronRight, MoreHorizontal,
+  Wallet, DollarSign, TrendingUp, TrendingDown
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 
@@ -427,105 +429,256 @@ export function KendaraanPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail Sheet */}
+      {/* Detail Sheet - Modernized */}
       <Sheet open={showDetail} onOpenChange={setShowDetail}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              {detailData?.jenisKendaraan === 'RODA_2' ? <Bike className="h-5 w-5" /> : <Car className="h-5 w-5" />}
-              {detailData?.nomorPolisi}
-            </SheetTitle>
-          </SheetHeader>
-          {detailData && (
-            <div className="mt-6 space-y-6">
-              {/* Basic Info */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <FileText className="h-4 w-4" /> Informasi Kendaraan
-                </h3>
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div><span className="text-muted-foreground">Pengguna</span><p className="font-medium">{detailData.namaPengguna}</p></div>
-                  <div><span className="text-muted-foreground">SKPD/Bidang</span><p className="font-medium">{detailData.skpdBidang}</p></div>
-                  <div><span className="text-muted-foreground">Merk/Type</span><p className="font-medium">{detailData.merk} {detailData.type}</p></div>
-                  <div><span className="text-muted-foreground">Tahun</span><p className="font-medium">{detailData.tahun}</p></div>
-                  <div><span className="text-muted-foreground">No. Rangka</span><p className="font-medium">{detailData.nomorRangka || '-'}</p></div>
-                  <div><span className="text-muted-foreground">No. Mesin</span><p className="font-medium">{detailData.nomorMesin || '-'}</p></div>
-                  <div><span className="text-muted-foreground">Warna</span><p className="font-medium">{detailData.warna || '-'}</p></div>
-                  <div><span className="text-muted-foreground">Kilometer</span><p className="font-medium">{detailData.kilometerTerakhir?.toLocaleString()} km</p></div>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0">
+          {detailData ? (
+            <div className="flex flex-col">
+              {/* Gradient Header with vehicle type icon and nomorPolisi */}
+              <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
+                    {detailData.jenisKendaraan === 'RODA_2' ? <Bike className="h-5 w-5" /> : <Car className="h-5 w-5" />}
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold">{detailData.nomorPolisi}</h2>
+                    <p className="text-sm text-slate-300">{detailData.merk} {detailData.type} • {detailData.tahun}</p>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium ${statusColors[detailData.statusKendaraan]}`}>
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge variant="outline" className="text-[10px] gap-1 bg-white/10 text-white border-white/20">
+                    {detailData.jenisKendaraan === 'RODA_2' ? <Bike className="h-3 w-3" /> : <Car className="h-3 w-3" />}
+                    {detailData.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}
+                  </Badge>
+                  <span className={'inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium ' + (statusColors[detailData.statusKendaraan] || '')}>
                     {detailData.statusKendaraan}
                   </span>
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium ${kondisiColors[detailData.kondisiKendaraan]}`}>
+                  <span className={'inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium ' + (kondisiColors[detailData.kondisiKendaraan] || '')}>
                     {detailData.kondisiKendaraan === 'KURANG_BAIK' ? 'Kurang Baik' : detailData.kondisiKendaraan}
                   </span>
                 </div>
               </div>
 
-              <Separator />
+              <div className="p-6 space-y-6">
+                {/* Vehicle Info Card */}
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      <FileText className="h-4 w-4" />
+                      Informasi Kendaraan
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-start gap-2">
+                        <Car className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Pengguna</p>
+                          <p className="font-semibold">{detailData.namaPengguna}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">SKPD/Bidang</p>
+                          <p className="font-semibold">{detailData.skpdBidang}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Bike className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Merk / Tipe</p>
+                          <p className="font-semibold">{detailData.merk} {detailData.type}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Plus className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Tahun</p>
+                          <p className="font-semibold">{detailData.tahun}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Search className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">No. Rangka</p>
+                          <p className="font-semibold">{detailData.nomorRangka || '-'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Search className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">No. Mesin</p>
+                          <p className="font-semibold">{detailData.nomorMesin || '-'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Edit2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Warna</p>
+                          <p className="font-semibold">{detailData.warna || '-'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <ChevronRight className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Kilometer</p>
+                          <p className="font-semibold">{detailData.kilometerTerakhir?.toLocaleString()} km</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-              {/* Documents */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Upload className="h-4 w-4" /> Dokumen
-                </h3>
-                {detailData.documents?.length > 0 ? (
-                  <div className="space-y-2">
-                    {detailData.documents.map((doc: any) => (
-                      <div key={doc.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50 text-xs">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">{doc.fileName}</p>
-                            <p className="text-[10px] text-muted-foreground">{doc.jenisDokumen}</p>
+                {/* Budget Info Section */}
+                {detailData.budgets && detailData.budgets.length > 0 && (
+                  <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-emerald-50/30">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <div className="h-1 w-4 rounded-full bg-emerald-600" />
+                        <span className="h-4 w-4 inline-flex items-center justify-center text-emerald-600">💰</span>
+                        Informasi Anggaran
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {detailData.budgets.slice(0, 3).map((b: any) => (
+                          <div key={b.id} className="flex items-center justify-between p-2.5 rounded-lg border text-sm">
+                            <div>
+                              <p className="font-medium">Tahun {b.tahun}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Realisasi: Rp {b.realisasi?.toLocaleString('id-ID')} / Rp {b.totalAnggaran?.toLocaleString('id-ID')}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <span className={'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ' + (
+                                b.statusAnggaran === 'AKTIF' ? 'bg-emerald-100 text-emerald-700' :
+                                b.statusAnggaran === 'HABIS' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                              )}>
+                                {b.statusAnggaran}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                        <Button variant="ghost" size="sm" className="h-7">
-                          <Download className="h-3.5 w-3.5" />
-                        </Button>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Belum ada dokumen</p>
+                    </CardContent>
+                  </Card>
                 )}
-              </div>
 
-              <Separator />
-
-              {/* Service Summary */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold">Riwayat Service</h3>
-                {detailData.services?.length > 0 ? (
-                  <div className="space-y-2">
-                    {detailData.services.slice(0, 5).map((s: any) => (
-                      <div key={s.id} className="p-2.5 rounded-lg bg-muted/50 text-xs">
-                        <div className="flex justify-between">
-                          <span className="font-medium">{s.nomorService}</span>
-                          <Badge variant="outline" className="text-[10px]">{s.statusService}</Badge>
-                        </div>
-                        <p className="text-muted-foreground mt-1">
-                          {new Date(s.tanggalService).toLocaleDateString('id-ID')} • Rp {s.totalBiaya?.toLocaleString()}
-                        </p>
+                {/* Documents Section with file type badges */}
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      <FileText className="h-4 w-4" />
+                      Dokumen
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {detailData.documents?.length > 0 ? (
+                      <div className="space-y-2">
+                        {detailData.documents.map((doc: any) => {
+                          const ext = doc.fileName?.split('.').pop()?.toLowerCase() || ''
+                          const extColors: Record<string, string> = {
+                            pdf: 'bg-red-100 text-red-700',
+                            doc: 'bg-blue-100 text-blue-700',
+                            docx: 'bg-blue-100 text-blue-700',
+                            jpg: 'bg-purple-100 text-purple-700',
+                            jpeg: 'bg-purple-100 text-purple-700',
+                            png: 'bg-purple-100 text-purple-700',
+                          }
+                          return (
+                            <div key={doc.id} className="flex items-center gap-3 text-sm p-2.5 rounded-lg border hover:bg-muted/50 transition-colors">
+                              <Badge variant="outline" className={'text-[10px] font-bold ' + (extColors[ext] || 'bg-gray-100 text-gray-700')}>
+                                .{ext.toUpperCase() || 'FILE'}
+                              </Badge>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">{doc.fileName}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {doc.jenisDokumen && (
+                                    <span className="text-[10px] text-muted-foreground">{doc.jenisDokumen}</span>
+                                  )}
+                                  {doc.fileSize && (
+                                    <span className="text-[10px] text-muted-foreground">{(doc.fileSize / 1024).toFixed(0)} KB</span>
+                                  )}
+                                </div>
+                              </div>
+                              <Button variant="ghost" size="sm" className="h-7">
+                                <Download className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )
+                        })}
                       </div>
-                    ))}
-                    {detailData.totalBiayaService > 0 && (
-                      <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/10 text-xs font-medium">
-                        Total Biaya Service: Rp {detailData.totalBiayaService?.toLocaleString()}
-                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Belum ada dokumen</p>
                     )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Belum ada riwayat service</p>
-                )}
-              </div>
+                  </CardContent>
+                </Card>
 
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" size="sm" className="flex-1 gap-1" onClick={() => { setShowDetail(false); openEdit(detailData) }}>
-                  <Edit2 className="h-3.5 w-3.5" /> Edit
-                </Button>
+                {/* Service History - Mini Timeline */}
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      Riwayat Service
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {detailData.services?.length > 0 ? (
+                      <div className="relative pl-6">
+                        {/* Timeline line */}
+                        <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-slate-200" />
+                        <div className="space-y-3">
+                          {detailData.services.slice(0, 5).map((s: any, idx: number) => (
+                            <div key={s.id} className="relative">
+                              <div className={'absolute -left-4 mt-1.5 h-3 w-3 rounded-full border-2 border-white ' + (idx === 0 ? 'bg-slate-700' : 'bg-slate-300') + ' z-10'} />
+                              <div className="flex items-center justify-between p-2.5 rounded-lg border text-sm">
+                                <div>
+                                  <p className="font-medium">{s.nomorService}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(s.tanggalService).toLocaleDateString('id-ID')}
+                                    {s.bengkel?.namaBengkel && (' • ' + s.bengkel.namaBengkel)}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium">Rp {s.totalBiaya?.toLocaleString()}</span>
+                                  <Badge variant="outline" className="text-[10px]">{s.statusService}</Badge>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {detailData.totalBiayaService > 0 && (
+                          <div className="mt-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">Total Biaya Service</span>
+                              <span className="text-lg font-bold">Rp {detailData.totalBiayaService?.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Belum ada riwayat service</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Edit Button */}
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" size="sm" className="flex-1 gap-1" onClick={() => { setShowDetail(false); openEdit(detailData) }}>
+                    <Edit2 className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                </div>
               </div>
+            </div>
+          ) : (
+            <div className="p-6 space-y-4">
+              <Skeleton className="h-40 w-full" />
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-32 w-full" />
+              ))}
             </div>
           )}
         </SheetContent>

@@ -20,6 +20,15 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
+  Bike,
+  Car,
+  CalendarDays,
+  User,
+  Gauge,
+  FileText,
+  CheckCircle2,
+  ArrowUpRight,
+  CircleDot,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -76,6 +85,7 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { Budget, Vehicle } from '@/types'
 
 // --- Zod Schema ---
@@ -147,6 +157,142 @@ function getStatusBadge(status: string) {
   }
 }
 
+// --- Summary Card Sub-component ---
+function SummaryCardGroup({
+  title,
+  icon,
+  summary,
+  isLoading,
+  variant = 'default',
+}: {
+  title: string
+  icon: React.ReactNode
+  summary?: { totalAnggaran: number; totalRealisasi: number; totalSisaAnggaran: number; overBudgetCount: number }
+  isLoading: boolean
+  variant?: 'default' | 'roda4' | 'roda2'
+}) {
+  const accentColor = variant === 'roda4'
+    ? 'from-slate-700 to-slate-800'
+    : variant === 'roda2'
+    ? 'from-slate-600 to-slate-700'
+    : 'from-slate-800 to-slate-900'
+
+  const iconBg = variant === 'roda4'
+    ? 'bg-slate-100 text-slate-700'
+    : variant === 'roda2'
+    ? 'bg-slate-100 text-slate-600'
+    : 'bg-slate-100 text-slate-800'
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className={`flex h-7 w-7 items-center justify-center rounded-md ${iconBg}`}>
+          {icon}
+        </div>
+        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Total Anggaran</CardTitle>
+            <DollarSign className="h-3.5 w-3.5 text-slate-400" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-6 w-28" />
+            ) : (
+              <p className="text-lg font-bold">{formatCurrency(summary?.totalAnggaran || 0)}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-emerald-50/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Realisasi</CardTitle>
+            <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-6 w-28" />
+            ) : (
+              <p className="text-lg font-bold text-emerald-600">{formatCurrency(summary?.totalRealisasi || 0)}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-amber-50/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Sisa Anggaran</CardTitle>
+            <TrendingDown className="h-3.5 w-3.5 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-6 w-28" />
+            ) : (
+              <p className="text-lg font-bold text-amber-600">{formatCurrency(summary?.totalSisaAnggaran || 0)}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-red-50/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Over Budget</CardTitle>
+            <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-6 w-12" />
+            ) : (
+              <p className="text-lg font-bold text-red-600">{summary?.overBudgetCount || 0}</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// --- Progress Ring Component ---
+function ProgressRing({ percent, size = 100, strokeWidth = 8 }: { percent: number; size?: number; strokeWidth?: number }) {
+  const radius = (size - strokeWidth) / 2
+  const circumference = radius * 2 * Math.PI
+  const offset = circumference - (percent / 100) * circumference
+
+  const color = percent > 90 ? '#ef4444' : percent > 80 ? '#f59e0b' : '#10b981'
+
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          className="text-muted/30"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-500"
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center">
+        <span className="text-xl font-bold" style={{ color }}>{percent}%</span>
+        <span className="text-[10px] text-muted-foreground">terpakai</span>
+      </div>
+    </div>
+  )
+}
+
 // --- Main Component ---
 export function AnggaranPage() {
   const queryClient = useQueryClient()
@@ -156,6 +302,7 @@ export function AnggaranPage() {
   const [search, setSearch] = useState('')
   const [tahunFilter, setTahunFilter] = useState(String(new Date().getFullYear()))
   const [statusFilter, setStatusFilter] = useState('all')
+  const [jenisTab, setJenisTab] = useState('all')
   const limit = 10
 
   // Modals
@@ -167,13 +314,14 @@ export function AnggaranPage() {
 
   // Queries
   const { data, isLoading } = useQuery({
-    queryKey: ['anggaran', page, search, tahunFilter, statusFilter],
+    queryKey: ['anggaran', page, search, tahunFilter, statusFilter, jenisTab],
     queryFn: () => fetchAnggaran({
       page: String(page),
       limit: String(limit),
       search,
       tahun: tahunFilter,
       statusAnggaran: statusFilter === 'all' ? '' : statusFilter,
+      jenisKendaraan: jenisTab === 'all' ? '' : jenisTab,
     }),
   })
 
@@ -198,13 +346,22 @@ export function AnggaranPage() {
     },
   })
 
+  // Watch vehicleId to auto-detect jenisKendaraan
+  const watchedVehicleId = form.watch('vehicleId')
+  const vehicleList = (vehicles as Vehicle[] || [])
+  const selectedVehicle = vehicleList.find((v: Vehicle) => v.id === watchedVehicleId)
+
   // Mutations
   const createMutation = useMutation({
     mutationFn: async (values: AnggaranFormValues) => {
+      const payload = {
+        ...values,
+        jenisKendaraan: selectedVehicle?.jenisKendaraan || 'RODA_4',
+      }
       const res = await fetch('/api/anggaran', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const err = await res.json()
@@ -223,10 +380,14 @@ export function AnggaranPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: AnggaranFormValues }) => {
+      const payload = {
+        ...values,
+        jenisKendaraan: selectedVehicle?.jenisKendaraan || 'RODA_4',
+      }
       const res = await fetch(`/api/anggaran/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const err = await res.json()
@@ -313,6 +474,8 @@ export function AnggaranPage() {
 
   // Summary cards data
   const summary = data?.summary
+  const summaryRoda4 = data?.summaryRoda4
+  const summaryRoda2 = data?.summaryRoda2
 
   return (
     <div className="space-y-6">
@@ -333,67 +496,45 @@ export function AnggaranPage() {
         </Button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Anggaran {tahunFilter}</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-7 w-36" />
-            ) : (
-              <p className="text-2xl font-bold">{formatCurrency(summary?.totalAnggaranTahun || 0)}</p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Tabs for Jenis Kendaraan */}
+      <Tabs value={jenisTab} onValueChange={(v) => { setJenisTab(v); setPage(1) }}>
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="all" className="gap-1.5">
+            <Wallet className="h-3.5 w-3.5" />
+            Semua
+          </TabsTrigger>
+          <TabsTrigger value="RODA_4" className="gap-1.5">
+            <Car className="h-3.5 w-3.5" />
+            Roda 4
+          </TabsTrigger>
+          <TabsTrigger value="RODA_2" className="gap-1.5">
+            <Bike className="h-3.5 w-3.5" />
+            Roda 2
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Realisasi</CardTitle>
-            <TrendingUp className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-7 w-36" />
-            ) : (
-              <p className="text-2xl font-bold text-emerald-600">{formatCurrency(summary?.totalRealisasi || 0)}</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Sisa Anggaran</CardTitle>
-            <TrendingDown className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-7 w-36" />
-            ) : (
-              <p className="text-2xl font-bold text-amber-600">{formatCurrency(summary?.totalSisaAnggaran || 0)}</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Over Budget</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-7 w-16" />
-            ) : (
-              <p className="text-2xl font-bold text-red-600">{summary?.overBudgetCount || 0}</p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Summary Cards - separate for Roda 4 and Roda 2 */}
+      <div className="space-y-4">
+        <SummaryCardGroup
+          title="Anggaran Roda 4"
+          icon={<Car className="h-4 w-4" />}
+          summary={summaryRoda4}
+          isLoading={isLoading}
+          variant="roda4"
+        />
+        <Separator />
+        <SummaryCardGroup
+          title="Anggaran Roda 2"
+          icon={<Bike className="h-4 w-4" />}
+          summary={summaryRoda2}
+          isLoading={isLoading}
+          variant="roda2"
+        />
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="shadow-sm">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -431,7 +572,7 @@ export function AnggaranPage() {
       </Card>
 
       {/* Data Table */}
-      <Card>
+      <Card className="shadow-sm">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-4">
@@ -453,6 +594,7 @@ export function AnggaranPage() {
                     <TableRow>
                       <TableHead className="w-12">No</TableHead>
                       <TableHead>Tahun</TableHead>
+                      <TableHead>Jenis</TableHead>
                       <TableHead>Nomor Polisi</TableHead>
                       <TableHead>Nama Pengguna</TableHead>
                       <TableHead className="text-right">Total Anggaran</TableHead>
@@ -466,10 +608,17 @@ export function AnggaranPage() {
                   <TableBody>
                     {data.data.map((budget: Budget & { vehicle?: Vehicle }, idx: number) => {
                       const usagePercent = getUsagePercent(budget.totalAnggaran, budget.realisasi)
+                      const jk = budget.jenisKendaraan || budget.vehicle?.jenisKendaraan
                       return (
-                        <TableRow key={budget.id}>
+                        <TableRow key={budget.id} className="hover:bg-muted/50 transition-colors">
                           <TableCell className="font-medium">{(page - 1) * limit + idx + 1}</TableCell>
                           <TableCell>{budget.tahun}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] gap-1">
+                              {jk === 'RODA_2' ? <Bike className="h-3 w-3" /> : <Car className="h-3 w-3" />}
+                              {jk === 'RODA_2' ? 'Roda 2' : 'Roda 4'}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="font-medium">{budget.vehicle?.nomorPolisi || '-'}</TableCell>
                           <TableCell>{budget.vehicle?.namaPengguna || '-'}</TableCell>
                           <TableCell className="text-right">{formatCurrency(budget.totalAnggaran)}</TableCell>
@@ -573,14 +722,27 @@ export function AnggaranPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {(vehicles as Vehicle[] || []).map((v: Vehicle) => (
+                        {(vehicleList).map((v: Vehicle) => (
                           <SelectItem key={v.id} value={v.id}>
-                            {v.nomorPolisi} - {v.namaPengguna} ({v.merk})
+                            <div className="flex items-center gap-2">
+                              {v.jenisKendaraan === 'RODA_2' ? <Bike className="h-3.5 w-3.5" /> : <Car className="h-3.5 w-3.5" />}
+                              {v.nomorPolisi} - {v.namaPengguna} ({v.merk})
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
+                    {/* Auto-detected jenisKendaraan badge */}
+                    {selectedVehicle && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Badge variant="outline" className="text-[10px] gap-1 bg-slate-50">
+                          {selectedVehicle.jenisKendaraan === 'RODA_2' ? <Bike className="h-3 w-3" /> : <Car className="h-3 w-3" />}
+                          {selectedVehicle.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">terdeteksi otomatis</span>
+                      </div>
+                    )}
                   </FormItem>
                 )}
               />
@@ -651,139 +813,204 @@ export function AnggaranPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Detail Sheet */}
+      {/* Detail Sheet - Modernized */}
       <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
-        <SheetContent className="sm:max-w-xl overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-primary" />
-              Detail Anggaran
-            </SheetTitle>
-          </SheetHeader>
+        <SheetContent className="sm:max-w-xl w-full overflow-y-auto p-0">
           {detail ? (
-            <div className="mt-6 space-y-6">
-              {/* Budget Info Card */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Informasi Anggaran</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Tahun</p>
-                      <p className="font-medium">{detail.tahun}</p>
+            <div className="flex flex-col">
+              {/* Gradient Header */}
+              <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-6 text-white">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
+                      <Wallet className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Status</p>
-                      {getStatusBadge(detail.statusAnggaran)}
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Nomor Polisi</p>
-                      <p className="font-medium">{detail.vehicle?.nomorPolisi}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Nama Pengguna</p>
-                      <p className="font-medium">{detail.vehicle?.namaPengguna}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Merk / Tipe</p>
-                      <p className="font-medium">{detail.vehicle?.merk} {detail.vehicle?.type}</p>
+                      <h2 className="text-lg font-bold">Detail Anggaran</h2>
+                      <p className="text-sm text-slate-300">{detail.vehicle?.nomorPolisi} — Tahun {detail.tahun}</p>
                     </div>
                   </div>
-                  <Separator />
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Total Anggaran</span>
-                      <span className="font-semibold">{formatCurrency(detail.totalAnggaran)}</span>
+                  {getStatusBadge(detail.statusAnggaran)}
+                </div>
+                {/* Large budget amount */}
+                <div className="mt-4 flex items-end justify-between">
+                  <div>
+                    <p className="text-xs text-slate-400 uppercase tracking-wide">Total Anggaran</p>
+                    <p className="text-3xl font-bold mt-1">{formatCurrency(detail.totalAnggaran)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] gap-1 bg-white/10 text-white border-white/20">
+                      {detail.jenisKendaraan === 'RODA_2' ? <Bike className="h-3 w-3" /> : <Car className="h-3 w-3" />}
+                      {detail.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Progress Ring & Budget Breakdown */}
+                <div className="flex items-center gap-6">
+                  <ProgressRing percent={getUsagePercent(detail.totalAnggaran, detail.realisasi)} />
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm">
+                        <div className="h-3 w-3 rounded-full bg-emerald-500" />
+                        <span className="text-muted-foreground">Realisasi</span>
+                      </div>
+                      <span className="font-bold text-emerald-600">{formatCurrency(detail.realisasi)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Realisasi</span>
-                      <span className="font-semibold text-emerald-600">{formatCurrency(detail.realisasi)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Sisa Anggaran</span>
-                      <span className={`font-semibold ${detail.sisaAnggaran < 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm">
+                        <div className="h-3 w-3 rounded-full bg-amber-500" />
+                        <span className="text-muted-foreground">Sisa Anggaran</span>
+                      </div>
+                      <span className={`font-bold ${detail.sisaAnggaran < 0 ? 'text-red-600' : 'text-amber-600'}`}>
                         {formatCurrency(detail.sisaAnggaran)}
                       </span>
                     </div>
-                    <div className="pt-2">
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span>Penggunaan Anggaran</span>
-                        <span className={getUsageColor(getUsagePercent(detail.totalAnggaran, detail.realisasi))}>
-                          {getUsagePercent(detail.totalAnggaran, detail.realisasi)}%
-                        </span>
+                    {detail.sisaAnggaran < 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <div className="h-3 w-3 rounded-full bg-red-500" />
+                        <span className="text-red-600 font-medium">Over Budget!</span>
                       </div>
-                      <Progress
-                        value={getUsagePercent(detail.totalAnggaran, detail.realisasi)}
-                        className={`h-3 ${getProgressColor(getUsagePercent(detail.totalAnggaran, detail.realisasi))}`}
-                      />
-                    </div>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
 
-              {/* Budget History */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <History className="h-4 w-4" />
-                    Riwayat Perubahan
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {detail.history?.length ? (
-                    <ScrollArea className="max-h-48">
-                      <div className="space-y-3">
-                        {detail.history.map((h: { id: string; perubahan: number; keterangan: string | null; createdAt: string }) => (
-                          <div key={h.id} className="flex items-start gap-3 text-sm">
-                            <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium">{h.keterangan || 'Perubahan anggaran'}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(h.createdAt).toLocaleDateString('id-ID', {
-                                  day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
-                                })}
-                                {h.perubahan !== 0 && ` • ${h.perubahan > 0 ? '+' : ''}${formatCurrency(h.perubahan)}`}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Belum ada riwayat perubahan</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Related Services */}
-              {detail.relatedServices?.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Service Terkait</CardTitle>
+                {/* Vehicle Info Card */}
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      Informasi Kendaraan
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ScrollArea className="max-h-64">
-                      <div className="space-y-2">
-                        {detail.relatedServices.map((s: { id: string; nomorService: string; tanggalService: string; totalBiaya: number; bengkel?: { namaBengkel: string } }) => (
-                          <div key={s.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
-                            <div>
-                              <p className="font-medium">{s.nomorService}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(s.tanggalService).toLocaleDateString('id-ID')} • {s.bengkel?.namaBengkel || '-'}
-                              </p>
-                            </div>
-                            <span className="font-medium text-emerald-600">{formatCurrency(s.totalBiaya)}</span>
-                          </div>
-                        ))}
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-start gap-2">
+                        <Car className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Nomor Polisi</p>
+                          <p className="font-semibold">{detail.vehicle?.nomorPolisi}</p>
+                        </div>
                       </div>
-                    </ScrollArea>
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Nama Pengguna</p>
+                          <p className="font-semibold">{detail.vehicle?.namaPengguna}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Gauge className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Merk / Tipe</p>
+                          <p className="font-semibold">{detail.vehicle?.merk} {detail.vehicle?.type}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <CalendarDays className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Tahun Anggaran</p>
+                          <p className="font-semibold">{detail.tahun}</p>
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
-              )}
+
+                {/* Budget History - Timeline Style */}
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      <History className="h-4 w-4" />
+                      Riwayat Perubahan
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {detail.history?.length ? (
+                      <ScrollArea className="max-h-48">
+                        <div className="relative pl-6">
+                          {/* Timeline line */}
+                          <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-slate-200" />
+                          <div className="space-y-4">
+                            {detail.history.map((h: { id: string; perubahan: number; keterangan: string | null; createdAt: string }, idx: number) => (
+                              <div key={h.id} className="relative flex items-start gap-3">
+                                <div className={`absolute -left-4 mt-1.5 h-3 w-3 rounded-full border-2 border-white ${idx === 0 ? 'bg-slate-700' : 'bg-slate-300'} z-10`} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm">{h.keterangan || 'Perubahan anggaran'}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(h.createdAt).toLocaleDateString('id-ID', {
+                                      day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                                    })}
+                                    {h.perubahan !== 0 && (
+                                      <span className={`ml-2 font-medium ${h.perubahan > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        {h.perubahan > 0 ? '+' : ''}{formatCurrency(h.perubahan)}
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Belum ada riwayat perubahan</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Related Services - Modern Cards */}
+                {detail.relatedServices?.length > 0 && (
+                  <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <div className="h-1 w-4 rounded-full bg-slate-700" />
+                        <FileText className="h-4 w-4" />
+                        Service Terkait
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ScrollArea className="max-h-64">
+                        <div className="space-y-2">
+                          {detail.relatedServices.map((s: { id: string; nomorService: string; tanggalService: string; totalBiaya: number; bengkel?: { namaBengkel: string } }, idx: number) => (
+                            <div
+                              key={s.id}
+                              className={`flex items-center justify-between p-3 rounded-lg border text-sm transition-colors hover:bg-muted/50 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-100">
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                </div>
+                                <div>
+                                  <p className="font-medium">{s.nomorService}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(s.tanggalService).toLocaleDateString('id-ID')} • {s.bengkel?.namaBengkel || '-'}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="font-bold text-emerald-600">{formatCurrency(s.totalBiaya)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                      {/* Total summary card */}
+                      <div className="mt-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Total Realisasi dari Service</span>
+                          <span className="text-lg font-bold">{formatCurrency(detail.realisasi)}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             </div>
           ) : (
-            <div className="mt-6 space-y-4">
+            <div className="p-6 space-y-4">
+              <Skeleton className="h-40 w-full" />
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-32 w-full" />
               ))}

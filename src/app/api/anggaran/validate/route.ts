@@ -27,6 +27,12 @@ export async function POST(request: NextRequest) {
 
     // If no budget set, return INFO level
     if (!budget) {
+      // Get vehicle jenisKendaraan for context
+      const vehicle = await db.vehicle.findUnique({
+        where: { id: vehicleId },
+        select: { jenisKendaraan: true },
+      })
+
       return NextResponse.json({
         data: {
           level: 'INFO',
@@ -37,6 +43,7 @@ export async function POST(request: NextRequest) {
           sisaAnggaran: 0,
           kekuranganDana: biaya,
           canSave: true,
+          jenisKendaraan: vehicle?.jenisKendaraan || null,
         },
       })
     }
@@ -108,6 +115,7 @@ export async function POST(request: NextRequest) {
         sisaAnggaran,
         kekuranganDana,
         canSave,
+        jenisKendaraan: budget.jenisKendaraan,
       },
     })
   } catch (error) {

@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const tahun = searchParams.get('tahun') || ''
     const vehicleId = searchParams.get('vehicleId') || ''
     const statusAnggaran = searchParams.get('statusAnggaran') || ''
+    const jenisKendaraan = searchParams.get('jenisKendaraan') || ''
 
     const skip = (page - 1) * limit
 
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       where.vehicle = {
+        ...(where.vehicle || {}),
         nomorPolisi: { contains: search }
       }
     }
@@ -33,6 +35,10 @@ export async function GET(request: NextRequest) {
       where.statusAnggaran = statusAnggaran
     }
 
+    if (jenisKendaraan) {
+      where.jenisKendaraan = jenisKendaraan
+    }
+
     const [data, total] = await Promise.all([
       db.budget.findMany({
         where,
@@ -44,6 +50,7 @@ export async function GET(request: NextRequest) {
               namaPengguna: true,
               merk: true,
               type: true,
+              jenisKendaraan: true,
             }
           },
           history: {
@@ -58,7 +65,7 @@ export async function GET(request: NextRequest) {
       db.budget.count({ where }),
     ])
 
-    // Calculate summaries for filtered year
+    // Calculate summaries for filtered year, both combined and per jenisKendaraan
     const summaryYear = tahun ? parseInt(tahun) : new Date().getFullYear()
     const yearWhere: Record<string, unknown> = { tahun: summaryYear }
 
@@ -69,6 +76,7 @@ export async function GET(request: NextRequest) {
         realisasi: true,
         sisaAnggaran: true,
         statusAnggaran: true,
+        jenisKendaraan: true,
       }
     })
 
@@ -76,6 +84,24 @@ export async function GET(request: NextRequest) {
     const totalRealisasi = summaries.reduce((sum, b) => sum + b.realisasi, 0)
     const totalSisaAnggaran = summaries.reduce((sum, b) => sum + b.sisaAnggaran, 0)
     const overBudgetCount = summaries.filter(b => b.statusAnggaran === 'HABIS').length
+
+    // Separate summaries for RODA_2 and RODA_4
+    const roda4Summaries = summaries.filter(b => b.jenisKendaraan === 'RODA_4')
+    const roda2Summaries = summaries.filter(b => b.jenisKendaraan === 'RODA_2')
+
+    const summaryRoda4 = {
+      totalAnggaran: roda4Summaries.reduce((sum, b) => sum + b.totalAnggaran, 0),
+      totalRealisasi: roda4Summaries.reduce((sum, b) => sum + b.realisasi, 0),
+      totalSisaAnggaran: roda4Summaries.reduce((sum, b) => sum + b.sisaAnggaran, 0),
+      overBudgetCount: roda4Summaries.filter(b => b.statusAnggaran === 'HABIS').length,
+    }
+
+    const summaryRoda2 = {
+      totalAnggaran: roda2Summaries.reduce((sum, b) => sum + b.totalAnggaran, 0),
+      totalRealisasi: roda2Summaries.reduce((sum, b) => sum + b.realisasi, 0),
+      totalSisaAnggaran: roda2Summaries.reduce((sum, b) => sum + b.sisaAnggaran, 0),
+      overBudgetCount: roda2Summaries.filter(b => b.statusAnggaran === 'HABIS').length,
+    }
 
     return NextResponse.json({
       data,
@@ -88,7 +114,9 @@ export async function GET(request: NextRequest) {
         totalRealisasi,
         totalSisaAnggaran,
         overBudgetCount,
-      }
+      },
+      summaryRoda4,
+      summaryRoda2,
     })
   } catch (error) {
     console.error('Error fetching budgets:', error)
@@ -99,7 +127,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { tahun, vehicleId, totalAnggaran, realisasi, statusAnggaran } = body
+    const { tahun, vehicleId, totalAnggaran, realisasi, statusAnggaran, jenisKendaraan } = body
 
     if (!tahun || !vehicleId || totalAnggaran === undefined) {
       return NextResponse.json({ error: 'Tahun, kendaraan, dan total anggaran wajib diisi' }, { status: 400 })
@@ -114,6 +142,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Anggaran untuk kendaraan dan tahun ini sudah ada' }, { status: 400 })
     }
 
+    // Auto-detect jenisKendaraan from vehicle if not provided
+    let finalJenisKendaraan = jenisKendaraan
+    if (!finalJenisKendaraan) {
+      const vehicle = await db.vehicle.findUnique({
+        where: { id: vehicleId },
+        select: { jenisKendaraan: true }
+      })
+      finalJenisKendaraan = vehicle?.jenisKendaraan || 'RODA_4'
+    }
+
     const realisasiValue = realisasi || 0
     const sisaAnggaran = totalAnggaran - realisasiValue
     const finalStatus = statusAnggaran || (sisaAnggaran <= 0 ? 'HABIS' : 'AKTIF')
@@ -122,6 +160,7 @@ export async function POST(request: NextRequest) {
       data: {
         tahun: parseInt(tahun),
         vehicleId,
+        jenisKendaraan: finalJenisKendaraan,
         totalAnggaran: parseFloat(totalAnggaran),
         realisasi: parseFloat(realisasiValue),
         sisaAnggaran: parseFloat(sisaAnggaran),
@@ -133,6 +172,7 @@ export async function POST(request: NextRequest) {
             id: true,
             nomorPolisi: true,
             namaPengguna: true,
+            jenisKendaraan: true,
           }
         }
       }

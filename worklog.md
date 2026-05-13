@@ -1,94 +1,44 @@
-# Worklog
-
 ---
-Task ID: 2-a
+Task ID: 1-8
 Agent: Main Agent
-Task: Update Prisma schema - add jenisKendaraan to Budget model
+Task: Implement Bengkel role restrictions, PIMPINAN role, and role-based access control
 
 Work Log:
-- Added `jenisKendaraan` field (String, default "RODA_4") to Budget model in prisma/schema.prisma
-- Ran `bun run db:push` to sync schema
-- Updated Budget type in src/types/index.ts to include jenisKendaraan field
-- Fixed existing budget data by updating jenisKendaraan based on vehicle type
+- Updated auth store (src/store/auth.ts) to include bengkelId and phone in AuthUser interface
+- Updated login API (src/app/api/auth/login/route.ts) to return bengkelId and phone
+- Updated auth/me API (src/app/api/auth/me/route.ts) to return bengkelId and phone
+- Rewrote sidebar (src/components/layout/app-sidebar.tsx) with role-based navigation filtering:
+  - BENGKEL: Dashboard, Service, Notifikasi only
+  - PIMPINAN: Dashboard, Kendaraan, Service, Anggaran, Riwayat, Laporan, Notifikasi (read-only)
+  - ADMIN/SUPER_ADMIN: Full access
+- Updated dashboard API (src/app/api/dashboard/route.ts) with role-based filtering:
+  - BENGKEL: Only shows vehicles/services/budgets from assigned bengkel
+  - PIMPINAN: Shows all data with readOnly flag
+- Rewrote dashboard page (src/components/dashboard/dashboard-page.tsx) with role-specific views and banners
+- Updated service page (src/components/service/service-page.tsx) for Bengkel role:
+  - Auto-filters by bengkelId for BENGKEL role
+  - Hides "Tambah Service" for PIMPINAN; controlled by system setting for BENGKEL
+  - Role-based action buttons: BENGKEL can only edit/detail/upload nota; PIMPINAN is read-only
+  - Added MENUNGGU_PERSETUJUAN status for bengkel completion workflow
+  - Added Bengkel edit dialog with progress, notes, nota upload, and "mark as complete" checkbox
+- Updated progress API (src/app/api/service/[id]/progress/route.ts):
+  - Supports MENUNGGU_PERSETUJUAN status
+  - Creates admin notifications when bengkel marks service as complete
+- Updated approve API (src/app/api/service/[id]/approve/route.ts):
+  - Two approval flows: DIAJUKAN→DISETUJUI and MENUNGGU_PERSETUJUAN→SELESAI
+  - Auto-updates budget realisasi on approval
+  - Creates bengkel notifications on approval/rejection
+- Added bengkel_can_create_service system setting to seed data
+- Added PIMPINAN user and second BENGKEL user to seed data
+- Added "Bengkel Bisa Tambah Service" toggle to Pengaturan page
+- Updated login page to show all demo accounts including PIMPINAN
+- Reseeded database with new users and settings
 
 Stage Summary:
-- Budget model now has jenisKendaraan field
-- All budget records now correctly tagged as RODA_2 or RODA_4
-- 4 RODA_2 budgets, 9 RODA_4 budgets in current data
-
----
-Task ID: 2-b
-Agent: Subagent (full-stack-developer)
-Task: Update Anggaran API routes with jenisKendaraan filter and separate summaries
-
-Work Log:
-- Updated GET /api/anggaran to accept jenisKendaraan query parameter
-- Added summaryRoda4 and summaryRoda2 to GET response
-- Updated POST /api/anggaran to auto-populate jenisKendaraan from vehicle record
-- Updated PUT /api/anggaran/[id] to update jenisKendaraan when vehicleId changes
-- Updated /api/anggaran/validate to return jenisKendaraan in validation response
-
-Stage Summary:
-- Anggaran API fully supports jenisKendaraan filtering
-- Separate summaries for Roda 2 and Roda 4 returned in API response
-
----
-Task ID: 2-c & 4
-Agent: Subagent (full-stack-developer)
-Task: Rewrite AnggaranPage with Roda 2/Roda 4 tabs + Modernize Detail Views
-
-Work Log:
-- Rewrote AnggaranPage with Tabs component (Semua/Roda 4/Roda 2)
-- Added SummaryCardGroup for separate Roda 2/4 budget summaries
-- Added Jenis column with Bike/Car badges to data table
-- Added auto-detected jenisKendaraan badge in Add/Edit form
-- Modernized Anggaran Detail Sheet with gradient header, ProgressRing, timeline history
-- Modernized Service Detail Sheet with gradient header, accent bars, color-coded documents
-- Modernized Kendaraan Detail Sheet with gradient header, budget info section, mini-timeline
-
-Stage Summary:
-- AnggaranPage now has 3 tabs for All/Roda 4/Roda 2
-- All detail sheets have modern gradient headers and improved visual hierarchy
-
----
-Task ID: 3
-Agent: Subagent (full-stack-developer)
-Task: Create Login Page + Auth system
-
-Work Log:
-- Created /src/store/auth.ts Zustand store with login/logout/checkAuth
-- Created /api/auth/login route (email/password validation against DB)
-- Created /api/auth/me route (user info retrieval)
-- Created /api/auth/logout route
-- Created /src/components/auth/login-page.tsx with beautiful gradient design
-- Updated /src/app/page.tsx with auth gate (show Login when not authenticated)
-- Updated app-header.tsx with real user data and logout button
-- Updated seed.ts with plain text passwords
-
-Stage Summary:
-- Full authentication system with login page, auth store, API routes
-- Test credentials: superadmin@bkad.go.id / admin123
-
----
-Task ID: 5 & 6
-Agent: Subagent (full-stack-developer)
-Task: Multi Upload Nota + Fix Laporan
-
-Work Log:
-- Added fileType and jenisDokumen fields to ServiceDocument Prisma model
-- Rewrote /api/service/[id]/documents to accept FormData with multiple files
-- Created DELETE /api/service/[id]/documents/[docId] endpoint
-- Created /src/components/shared/multi-upload.tsx with drag-drop, file preview, jenisDokumen selection
-- Added Upload Nota button and dialog to Service detail sheet
-- Enhanced document cards with color-coded jenisDokumen badges
-- Updated Laporan API with budgetByType (RODA_2/RODA_4) and monthlyByType
-- Added vehicle type filter badges to Laporan page
-- Added Ringkasan Anggaran section with separate Roda 2/4 breakdown
-- Added Anggaran tab with budget comparison chart
-- Improved CSV export with Jenis Kendaraan column
-- Improved PDF export with proper government letterhead and budget breakdown
-
-Stage Summary:
-- Multi-file upload with drag-drop for service documents
-- Laporan page now shows separate Roda 2/4 budget breakdowns
-- Export improved with vehicle type data and better PDF formatting
+- Complete role-based access control implemented for all 4 roles
+- Bengkel role restricted to Dashboard, Service (edit/detail/upload nota only), and Notifikasi
+- PIMPINAN role has read-only access to Dashboard, Kendaraan, Service, Anggaran, Riwayat, Laporan, Notifikasi
+- Bengkel workflow: edit progress → mark as complete → admin approves → SELESAI
+- canCreateService toggle in Pengaturan controlled by Admin
+- All APIs verified working: login returns bengkelId, dashboard filters by role/bengkelId
+- Build passes with 0 errors, lint passes with only 2 pre-existing warnings

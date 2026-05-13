@@ -188,7 +188,7 @@ export function PengaturanPage() {
 
   const handleSaveSettings = (section: string) => {
     const sectionKeys: Record<string, string[]> = {
-      umum: ['nama_instansi', 'tahun_aktif', 'nomor_surat_otomatis', 'format_nomor_surat'],
+      umum: ['nama_instansi', 'tahun_aktif', 'nomor_surat_otomatis', 'format_nomor_surat', 'bengkel_can_create_service'],
       email: ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from_email', 'whatsapp_api_key', 'whatsapp_api_url',
         'notif_service_diajukan', 'notif_service_disetujui', 'notif_service_ditolak', 'notif_service_selesai', 'notif_anggaran_warning'],
     }
@@ -274,6 +274,22 @@ export function PengaturanPage() {
                 <Switch
                   checked={localSettings.nomor_surat_otomatis === 'true'}
                   onCheckedChange={(checked) => setLocalSettings(s => ({ ...s, nomor_surat_otomatis: checked.toString() }))}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Bengkel Bisa Tambah Service
+                  </Label>
+                  <p className="text-xs text-muted-foreground">Izinkan role Bengkel untuk membuat service baru. Jika nonaktif, hanya Admin yang dapat membuat service.</p>
+                </div>
+                <Switch
+                  checked={localSettings.bengkel_can_create_service === 'true'}
+                  onCheckedChange={(checked) => setLocalSettings(s => ({ ...s, bengkel_can_create_service: checked.toString() }))}
                 />
               </div>
 

@@ -200,6 +200,9 @@ export function LoginPage() {
                 <p className="text-xs text-slate-400">
                   <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-600">bengkel@jaya-makmur.co.id</span> / <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-600">bengkel123</span>
                 </p>
+                <p className="text-xs text-slate-400">
+                  <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-600">pimpinan@bkad.go.id</span> / <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-600">pimpinan123</span>
+                </p>
               </div>
             </div>
           </form>

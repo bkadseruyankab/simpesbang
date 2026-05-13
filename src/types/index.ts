@@ -6,7 +6,7 @@ export type StatusKendaraan = 'AKTIF' | 'NONAKTIF' | 'RUSAK'
 
 export type KondisiKendaraan = 'BAIK' | 'KURANG_BAIK' | 'RUSAK'
 
-export type StatusService = 'DIAJUKAN' | 'DISETUJUI' | 'DITOLAK' | 'DIPROSES' | 'PENDING' | 'SELESAI'
+export type StatusService = 'DIAJUKAN' | 'DISETUJUI' | 'DITOLAK' | 'DIPROSES' | 'PENDING' | 'SELESAI' | 'MENUNGGU_PERSETUJUAN'
 
 export type JenisService = 'RUTIN' | 'PERBAIKAN' | 'DARURAT'
 

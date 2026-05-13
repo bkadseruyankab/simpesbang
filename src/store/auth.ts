@@ -5,6 +5,8 @@ export interface AuthUser {
   name: string
   email: string
   role: string
+  bengkelId?: string
+  phone?: string
 }
 
 interface AuthState {

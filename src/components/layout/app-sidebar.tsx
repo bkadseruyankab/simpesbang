@@ -1,6 +1,7 @@
 'use client'
 
 import { useNavigationStore, type PageKey } from '@/store/navigation'
+import { useAuthStore } from '@/store/auth'
 import {
   LayoutDashboard,
   Car,
@@ -17,11 +18,12 @@ import {
   Shield,
   Bike,
   Truck,
+  Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
 import {
   Tooltip,
   TooltipContent,
@@ -29,23 +31,50 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
-const navItems: { key: PageKey; label: string; icon: React.ReactNode; group: string }[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, group: 'Utama' },
-  { key: 'kendaraan', label: 'Kendaraan', icon: <Car className="h-5 w-5" />, group: 'Utama' },
-  { key: 'service', label: 'Service', icon: <Wrench className="h-5 w-5" />, group: 'Utama' },
-  { key: 'anggaran', label: 'Anggaran', icon: <Wallet className="h-5 w-5" />, group: 'Utama' },
-  { key: 'bengkel', label: 'Bengkel', icon: <Building2 className="h-5 w-5" />, group: 'Manajemen' },
-  { key: 'suku-cadang', label: 'Suku Cadang', icon: <Package className="h-5 w-5" />, group: 'Manajemen' },
-  { key: 'riwayat', label: 'Riwayat', icon: <History className="h-5 w-5" />, group: 'Laporan' },
-  { key: 'laporan', label: 'Laporan', icon: <FileBarChart className="h-5 w-5" />, group: 'Laporan' },
-  { key: 'notifikasi', label: 'Notifikasi', icon: <Bell className="h-5 w-5" />, group: 'Sistem' },
-  { key: 'pengaturan', label: 'Pengaturan', icon: <Settings className="h-5 w-5" />, group: 'Sistem' },
+interface NavItem {
+  key: PageKey
+  label: string
+  icon: React.ReactNode
+  group: string
+  roles: string[] // which roles can see this item
+}
+
+const navItems: NavItem[] = [
+  { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, group: 'Utama', roles: ['SUPER_ADMIN', 'ADMIN', 'BENGKEL', 'PIMPINAN'] },
+  { key: 'kendaraan', label: 'Kendaraan', icon: <Car className="h-5 w-5" />, group: 'Utama', roles: ['SUPER_ADMIN', 'ADMIN', 'PIMPINAN'] },
+  { key: 'service', label: 'Service', icon: <Wrench className="h-5 w-5" />, group: 'Utama', roles: ['SUPER_ADMIN', 'ADMIN', 'BENGKEL', 'PIMPINAN'] },
+  { key: 'anggaran', label: 'Anggaran', icon: <Wallet className="h-5 w-5" />, group: 'Utama', roles: ['SUPER_ADMIN', 'ADMIN', 'PIMPINAN'] },
+  { key: 'bengkel', label: 'Bengkel', icon: <Building2 className="h-5 w-5" />, group: 'Manajemen', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { key: 'suku-cadang', label: 'Suku Cadang', icon: <Package className="h-5 w-5" />, group: 'Manajemen', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { key: 'riwayat', label: 'Riwayat', icon: <History className="h-5 w-5" />, group: 'Laporan', roles: ['SUPER_ADMIN', 'ADMIN', 'PIMPINAN'] },
+  { key: 'laporan', label: 'Laporan', icon: <FileBarChart className="h-5 w-5" />, group: 'Laporan', roles: ['SUPER_ADMIN', 'ADMIN', 'PIMPINAN'] },
+  { key: 'notifikasi', label: 'Notifikasi', icon: <Bell className="h-5 w-5" />, group: 'Sistem', roles: ['SUPER_ADMIN', 'ADMIN', 'BENGKEL', 'PIMPINAN'] },
+  { key: 'pengaturan', label: 'Pengaturan', icon: <Settings className="h-5 w-5" />, group: 'Sistem', roles: ['SUPER_ADMIN', 'ADMIN'] },
 ]
+
+const roleBadgeColors: Record<string, string> = {
+  SUPER_ADMIN: 'bg-red-100 text-red-700 border-red-200',
+  ADMIN: 'bg-blue-100 text-blue-700 border-blue-200',
+  BENGKEL: 'bg-amber-100 text-amber-700 border-amber-200',
+  PIMPINAN: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+}
+
+const roleLabels: Record<string, string> = {
+  SUPER_ADMIN: 'Super Admin',
+  ADMIN: 'Admin',
+  BENGKEL: 'Bengkel',
+  PIMPINAN: 'Pimpinan',
+}
 
 export function AppSidebar() {
   const { currentPage, setCurrentPage, sidebarOpen, setSidebarOpen } = useNavigationStore()
+  const { user } = useAuthStore()
+  const userRole = user?.role || 'ADMIN'
 
-  const groups = [...new Set(navItems.map(item => item.group))]
+  // Filter nav items based on role
+  const filteredNavItems = navItems.filter(item => item.roles.includes(userRole))
+
+  const groups = [...new Set(filteredNavItems.map(item => item.group))]
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -68,6 +97,17 @@ export function AppSidebar() {
           )}
         </div>
 
+        {/* Role Badge */}
+        {sidebarOpen && (
+          <div className="px-4 py-2 border-b border-border/30">
+            <Badge variant="outline" className={cn('text-[10px] font-medium gap-1', roleBadgeColors[userRole] || '')}>
+              {userRole === 'BENGKEL' && <Building2 className="h-3 w-3" />}
+              {userRole === 'PIMPINAN' && <Eye className="h-3 w-3" />}
+              {roleLabels[userRole] || userRole}
+            </Badge>
+          </div>
+        )}
+
         {/* Navigation */}
         <ScrollArea className="flex-1 px-3 py-4">
           <nav className="space-y-6">
@@ -79,7 +119,7 @@ export function AppSidebar() {
                   </p>
                 )}
                 <div className="space-y-1">
-                  {navItems
+                  {filteredNavItems
                     .filter(item => item.group === group)
                     .map((item) => {
                       const isActive = currentPage === item.key

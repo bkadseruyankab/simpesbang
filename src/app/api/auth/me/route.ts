@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
         name: true,
         email: true,
         role: true,
+        bengkelId: true,
+        phone: true,
         isActive: true,
       },
     })
@@ -43,6 +45,8 @@ export async function GET(request: NextRequest) {
         name: user.name,
         email: user.email,
         role: user.role,
+        bengkelId: user.bengkelId,
+        phone: user.phone,
       },
     })
   } catch (error) {

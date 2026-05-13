@@ -47,6 +47,7 @@ import { id as localeId } from 'date-fns/locale'
 import { toast } from '@/hooks/use-toast'
 import { MultiUpload } from '@/components/shared/multi-upload'
 import type { Service, ServiceItem, ServiceDocument, BudgetValidation, StatusService, JenisService, Prioritas } from '@/types'
+import { useAuthStore } from '@/store/auth'
 
 // ========== Types ==========
 interface ServiceFormData {
@@ -77,6 +78,7 @@ const STATUS_COLORS: Record<StatusService, string> = {
   DIPROSES: 'bg-orange-100 text-orange-800 border-orange-200',
   PENDING: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   SELESAI: 'bg-purple-100 text-purple-800 border-purple-200',
+  MENUNGGU_PERSETUJUAN: 'bg-amber-100 text-amber-800 border-amber-200',
 }
 
 const STATUS_LABELS: Record<StatusService, string> = {
@@ -86,6 +88,7 @@ const STATUS_LABELS: Record<StatusService, string> = {
   DIPROSES: 'Diproses',
   PENDING: 'Pending',
   SELESAI: 'Selesai',
+  MENUNGGU_PERSETUJUAN: 'Menunggu Persetujuan',
 }
 
 const JENIS_SERVICE_OPTIONS: { value: JenisService; label: string }[] = [
@@ -138,6 +141,14 @@ function formatDate(dateStr: string | Date): string {
 export function ServicePage() {
   const queryClient = useQueryClient()
 
+  // Auth & Role
+  const { user } = useAuthStore()
+  const userRole = user?.role || ''
+  const userBengkelId = user?.bengkelId
+  const isBengkel = userRole === 'BENGKEL'
+  const isPimpinan = userRole === 'PIMPINAN'
+  const isAdmin = ['SUPER_ADMIN', 'ADMIN'].includes(userRole)
+
   // State
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
@@ -161,6 +172,8 @@ export function ServicePage() {
   const [showUploadNota, setShowUploadNota] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [rejectReason, setRejectReason] = useState('')
+  const [showBengkelEdit, setShowBengkelEdit] = useState(false)
+  const [bengkelEditService, setBengkelEditService] = useState<Service | null>(null)
 
   // Build query params
   const queryParams = useMemo(() => {
@@ -174,8 +187,12 @@ export function ServicePage() {
     if (filterJenis) params.jenisService = filterJenis
     if (dateFrom) params.dateFrom = dateFrom
     if (dateTo) params.dateTo = dateTo
+    // For BENGKEL role, filter by their own bengkelId
+    if (isBengkel && userBengkelId && !filterBengkel) {
+      params.bengkelId = userBengkelId
+    }
     return params
-  }, [page, limit, search, filterStatus, filterBengkel, filterJenis, dateFrom, dateTo])
+  }, [page, limit, search, filterStatus, filterBengkel, filterJenis, dateFrom, dateTo, isBengkel, userBengkelId])
 
   // Queries
   const { data: servicesData, isLoading: servicesLoading } = useQuery({
@@ -197,6 +214,19 @@ export function ServicePage() {
     queryKey: ['workshops-list'],
     queryFn: () => fetch('/api/bengkel').then(r => r.json()),
   })
+
+  // Fetch system settings for role-based permissions
+  const { data: settingsData } = useQuery({
+    queryKey: ['system-settings'],
+    queryFn: async () => {
+      const res = await fetch('/api/pengaturan')
+      return res.json()
+    },
+  })
+
+  const canCreateService = isBengkel
+    ? settingsData?.bengkel_can_create_service === 'true'
+    : isAdmin
 
   // Handle both array and {data:[...]} response formats
   const vehicles = Array.isArray(vehiclesData) ? vehiclesData : (vehiclesData?.data || [])
@@ -304,6 +334,38 @@ export function ServicePage() {
     },
   })
 
+  // Bengkel update mutation (includes marking as SELESAI/MENUNGGU_PERSETUJUAN)
+  const bengkelUpdateMutation = useMutation({
+    mutationFn: async (data: { id: string; progress: number; statusService?: string; catatanBengkel?: string; markAsSelesai?: boolean }) => {
+      const payload: Record<string, unknown> = {
+        progress: data.progress,
+        catatanBengkel: data.catatanBengkel,
+      }
+      if (data.markAsSelesai) {
+        payload.statusService = 'MENUNGGU_PERSETUJUAN'
+        payload.progress = 100
+      } else if (data.statusService) {
+        payload.statusService = data.statusService
+      }
+      const res = await fetch(`/api/service/${data.id}/progress`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Gagal mengupdate service') }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['services'] })
+      toast({ title: 'Berhasil', description: 'Service berhasil diupdate' })
+      setShowBengkelEdit(false)
+      setBengkelEditService(null)
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Gagal', description: error.message, variant: 'destructive' })
+    },
+  })
+
   // Upload Nota mutation
   const uploadNotaMutation = useMutation({
     mutationFn: async ({ serviceId, files, jenisDokumen }: { serviceId: string; files: File[]; jenisDokumen: string }) => {
@@ -396,6 +458,16 @@ export function ServicePage() {
     setShowProgress(true)
   }
 
+  const handleBengkelEdit = (service: Service) => {
+    setBengkelEditService(service)
+    setShowBengkelEdit(true)
+  }
+
+  const handleBengkelUploadNota = (service: Service) => {
+    setDetailService(service)
+    setShowUploadNota(true)
+  }
+
   const handleSubmit = (data: ServiceFormData) => {
     if (editingService) {
       updateMutation.mutate({ ...data, id: editingService.id })
@@ -411,6 +483,30 @@ export function ServicePage() {
 
   return (
     <div className="space-y-4">
+      {/* Role Indicator Banner */}
+      {isBengkel && (
+        <div className="flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 p-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
+            <Wrench className="h-4 w-4 text-orange-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-orange-800">Mode Bengkel</p>
+            <p className="text-xs text-orange-600">Anda hanya dapat melihat dan mengelola service yang ditugaskan ke bengkel Anda</p>
+          </div>
+        </div>
+      )}
+      {isPimpinan && (
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100">
+            <Eye className="h-4 w-4 text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-emerald-800">Mode Pimpinan</p>
+            <p className="text-xs text-emerald-600">Anda hanya dapat melihat data service sebagai baca saja</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -429,10 +525,12 @@ export function ServicePage() {
             </p>
           </div>
         </div>
-        <Button onClick={handleAddNew} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Tambah Service
-        </Button>
+        {canCreateService && !isPimpinan && (
+          <Button onClick={handleAddNew} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Tambah Service
+          </Button>
+        )}
       </div>
 
       {/* Search & Filters */}
@@ -477,17 +575,21 @@ export function ServicePage() {
               </div>
               <div>
                 <Label className="text-xs mb-1">Bengkel</Label>
-                <Select value={filterBengkel} onValueChange={(v) => { setFilterBengkel(v === 'ALL' ? '' : v); setPage(1) }}>
-                  <SelectTrigger className="w-full h-9 text-sm">
-                    <SelectValue placeholder="Semua Bengkel" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">Semua Bengkel</SelectItem>
-                    {workshops.map((w: { id: string; namaBengkel: string }) => (
-                      <SelectItem key={w.id} value={w.id}>{w.namaBengkel}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isBengkel ? (
+                  <Input className="h-9 text-sm bg-muted/50" value={user?.name || 'Bengkel Anda'} disabled />
+                ) : (
+                  <Select value={filterBengkel} onValueChange={(v) => { setFilterBengkel(v === 'ALL' ? '' : v); setPage(1) }}>
+                    <SelectTrigger className="w-full h-9 text-sm">
+                      <SelectValue placeholder="Semua Bengkel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Semua Bengkel</SelectItem>
+                      {workshops.map((w: { id: string; namaBengkel: string }) => (
+                        <SelectItem key={w.id} value={w.id}>{w.namaBengkel}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div>
                 <Label className="text-xs mb-1">Jenis Service</Label>
@@ -529,9 +631,11 @@ export function ServicePage() {
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Wrench className="h-12 w-12 mb-3 opacity-30" />
               <p className="text-sm">Belum ada data service</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={handleAddNew}>
-                <Plus className="h-4 w-4 mr-1" /> Tambah Service
-              </Button>
+              {canCreateService && !isPimpinan && (
+                <Button variant="outline" size="sm" className="mt-3" onClick={handleAddNew}>
+                  <Plus className="h-4 w-4 mr-1" /> Tambah Service
+                </Button>
+              )}
             </div>
           ) : (
             <>
@@ -592,26 +696,53 @@ export function ServicePage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
+                            {/* Detail button - visible to all roles */}
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDetail(service)} title="Detail">
                               <Eye className="h-4 w-4" />
                             </Button>
-                            {(service.statusService === 'DIAJUKAN' || service.statusService === 'DITOLAK') && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(service)} title="Edit">
-                                <Edit className="h-4 w-4" />
-                              </Button>
+
+                            {/* BENGKEL role actions */}
+                            {isBengkel && (
+                              <>
+                                {/* Edit button for BENGKEL - only for DIPROSES/PENDING status */}
+                                {['DIPROSES', 'PENDING', 'DISETUJUI'].includes(service.statusService) && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleBengkelEdit(service)} title="Update Progress & Catatan">
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {/* Upload Nota button for BENGKEL - for DIPROSES/PENDING status */}
+                                {['DIPROSES', 'PENDING', 'DISETUJUI'].includes(service.statusService) && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleBengkelUploadNota(service)} title="Upload Nota">
+                                    <Upload className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </>
                             )}
-                            {service.statusService === 'DIAJUKAN' && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleApproveReject(service)} title="Setujui/Tolak">
-                                <CheckCircle className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {['DISETUJUI', 'DIPROSES', 'PENDING'].includes(service.statusService) && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleProgress(service)} title="Update Progress">
-                                <RefreshCw className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {service.statusService !== 'SELESAI' && (
-                              <DeleteButton serviceId={service.id} nomorService={service.nomorService} onDelete={() => deleteMutation.mutate(service.id)} isDeleting={deleteMutation.isPending} />
+
+                            {/* PIMPINAN role - detail only, no other actions */}
+
+                            {/* ADMIN/SUPER_ADMIN role actions */}
+                            {isAdmin && (
+                              <>
+                                {(service.statusService === 'DIAJUKAN' || service.statusService === 'DITOLAK') && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(service)} title="Edit">
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {(service.statusService === 'DIAJUKAN' || service.statusService === 'MENUNGGU_PERSETUJUAN') && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleApproveReject(service)} title="Setujui/Tolak">
+                                    <CheckCircle className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {['DISETUJUI', 'DIPROSES', 'PENDING'].includes(service.statusService) && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleProgress(service)} title="Update Progress">
+                                    <RefreshCw className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {service.statusService !== 'SELESAI' && (
+                                  <DeleteButton serviceId={service.id} nomorService={service.nomorService} onDelete={() => deleteMutation.mutate(service.id)} isDeleting={deleteMutation.isPending} />
+                                )}
+                              </>
                             )}
                           </div>
                         </TableCell>
@@ -707,6 +838,16 @@ export function ServicePage() {
         service={progressService}
         onSubmit={(data) => progressMutation.mutate({ id: progressService!.id, ...data })}
         isSubmitting={progressMutation.isPending}
+      />
+
+      {/* Bengkel Edit Dialog */}
+      <BengkelEditDialog
+        key={bengkelEditService?.id || 'bengkel-new'}
+        open={showBengkelEdit}
+        onOpenChange={setShowBengkelEdit}
+        service={bengkelEditService}
+        onSubmit={(data) => bengkelUpdateMutation.mutate({ id: bengkelEditService!.id, ...data })}
+        isSubmitting={bengkelUpdateMutation.isPending}
       />
 
       {/* Detail Sheet - Modernized */}
@@ -1607,3 +1748,195 @@ function ProgressDialog({ open, onOpenChange, service, onSubmit, isSubmitting }:
 }
 
 export default ServicePage
+
+// ========== Bengkel Edit Dialog ==========
+interface BengkelEditDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  service: Service | null
+  onSubmit: (data: { progress: number; statusService?: string; catatanBengkel?: string; markAsSelesai?: boolean }) => void
+  isSubmitting: boolean
+}
+
+function BengkelEditDialog({ open, onOpenChange, service, onSubmit, isSubmitting }: BengkelEditDialogProps) {
+  const [progress, setProgress] = useState(service?.progress || 0)
+  const [catatanBengkel, setCatatanBengkel] = useState(service?.catatanBengkel || '')
+  const [markAsSelesai, setMarkAsSelesai] = useState(false)
+  const [notaFiles, setNotaFiles] = useState<File[]>([])
+
+  const handleSave = () => {
+    if (markAsSelesai) {
+      onSubmit({ progress: 100, catatanBengkel, markAsSelesai: true })
+    } else {
+      onSubmit({ progress, catatanBengkel })
+    }
+  }
+
+  // Upload nota files if any
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files) {
+      setNotaFiles(Array.from(files))
+    }
+  }
+
+  const uploadNotaFiles = async () => {
+    if (notaFiles.length === 0 || !service) return
+    const formData = new FormData()
+    notaFiles.forEach((file) => formData.append('files', file))
+    formData.append('jenisDokumen', 'NOTA')
+    try {
+      const res = await fetch(`/api/service/${service.id}/documents`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (res.ok) {
+        toast({ title: 'Berhasil', description: 'Nota berhasil diupload' })
+        setNotaFiles([])
+      } else {
+        toast({ title: 'Gagal', description: 'Gagal mengupload nota', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Gagal', description: 'Gagal mengupload nota', variant: 'destructive' })
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wrench className="h-5 w-5" />
+            Update Progress Service
+          </DialogTitle>
+          <DialogDescription>
+            Service {service?.nomorService} - {service?.vehicle?.nomorPolisi}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-5 py-4">
+          {/* Service Info Summary */}
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+            <p><strong>Kendaraan:</strong> {service?.vehicle?.nomorPolisi} - {service?.vehicle?.merk} {service?.vehicle?.type}</p>
+            <p><strong>Bengkel:</strong> {service?.bengkel?.namaBengkel}</p>
+            <p><strong>Jenis:</strong> {service?.jenisService} • <strong>Prioritas:</strong> {service?.prioritas}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-muted-foreground">Status:</span>
+              <Badge className={cn('text-xs border', STATUS_COLORS[service?.statusService as StatusService])}>
+                {STATUS_LABELS[service?.statusService as StatusService]}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Progress Slider */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Progress: {progress}%</Label>
+            <Slider
+              value={[progress]}
+              onValueChange={(v) => {
+                setProgress(v[0])
+                if (v[0] < 100) setMarkAsSelesai(false)
+              }}
+              max={100}
+              step={5}
+              className="w-full"
+              disabled={markAsSelesai}
+            />
+            <Progress value={markAsSelesai ? 100 : progress} className="h-2" />
+          </div>
+
+          {/* Catatan Bengkel */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Catatan Bengkel</Label>
+            <Textarea
+              className="mt-1"
+              placeholder="Tambahkan catatan progress, keterangan perbaikan, dll..."
+              value={catatanBengkel}
+              onChange={(e) => setCatatanBengkel(e.target.value)}
+              rows={4}
+            />
+          </div>
+
+          {/* Upload Nota */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Upload Nota / Dokumen</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                onChange={handleFileChange}
+                className="text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={uploadNotaFiles}
+                disabled={notaFiles.length === 0}
+                className="shrink-0 gap-1"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload
+              </Button>
+            </div>
+            {notaFiles.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                {notaFiles.length} file dipilih
+              </div>
+            )}
+            {service?.documents && service.documents.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-muted-foreground">Dokumen yang sudah diupload:</p>
+                {service.documents.map((doc) => (
+                  <div key={doc.id} className="flex items-center gap-2 text-xs p-1.5 rounded bg-muted/50">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="truncate">{doc.fileName}</span>
+                    <Badge variant="secondary" className="text-[10px] px-1 py-0">{doc.jenisDokumen}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Mark as Selesai */}
+          <div className="rounded-lg border-2 border-dashed border-amber-300 bg-amber-50/50 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="markAsSelesai"
+                checked={markAsSelesai}
+                onChange={(e) => {
+                  setMarkAsSelesai(e.target.checked)
+                  if (e.target.checked) setProgress(100)
+                }}
+                className="mt-1 h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+              />
+              <div>
+                <Label htmlFor="markAsSelesai" className="text-sm font-semibold text-amber-800 cursor-pointer">
+                  Tandai Selesai & Ajukan Persetujuan
+                </Label>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  Service akan ditandai selesai dan diajukan untuk persetujuan admin. Progress otomatis diatur 100%.
+                </p>
+              </div>
+            </div>
+            {markAsSelesai && (
+              <div className="rounded-md bg-amber-100 border border-amber-200 p-2.5 text-sm text-amber-800">
+                <strong>Perhatian:</strong> Setelah ditandai selesai, status service akan berubah menjadi <Badge className="text-xs border bg-amber-100 text-amber-800 border-amber-200">Menunggu Persetujuan</Badge> dan menunggu persetujuan dari admin.
+              </div>
+            )}
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            Batal
+          </Button>
+          <Button onClick={handleSave} disabled={isSubmitting} className="gap-2">
+            {isSubmitting && <RefreshCw className="h-4 w-4 animate-spin" />}
+            {markAsSelesai ? 'Ajukan Persetujuan' : 'Simpan Progress'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

@@ -95,7 +95,30 @@ async function main() {
     },
   })
 
-  console.log('✅ 3 User dibuat')
+  const userBengkel2 = await prisma.user.create({
+    data: {
+      email: 'bengkel@nusantara-auto.co.id',
+      name: 'Budi Prasetyo',
+      password: 'bengkel123',
+      role: 'BENGKEL',
+      phone: '081234567893',
+      bengkelId: workshop2.id,
+      isActive: true,
+    },
+  })
+
+  const userPimpinan = await prisma.user.create({
+    data: {
+      email: 'pimpinan@bkad.go.id',
+      name: 'Drs. H. Suryanto, M.M',
+      password: 'pimpinan123',
+      role: 'PIMPINAN',
+      phone: '081234567894',
+      isActive: true,
+    },
+  })
+
+  console.log('✅ 5 User dibuat')
 
   // ==================== VEHICLES ====================
   const vehicle1 = await prisma.vehicle.create({
@@ -603,6 +626,8 @@ async function main() {
     { userId: userBengkel.id, title: 'Spare Part Tersedia', message: 'Radiator untuk Toyota Avanza sudah tersedia, bisa langsung dipasang', type: 'SUCCESS', isRead: false },
     { userId: userSuperAdmin.id, title: 'Laporan Bulanan Tersedia', message: 'Laporan pengeluaran service bulan ini sudah bisa diakses', type: 'INFO', isRead: true },
     { userId: userAdmin.id, title: 'Service Terlambat', message: 'Service kendaraan D 0123 OP (Daihatsu Gran Max) melebihi estimasi waktu perbaikan', type: 'WARNING', isRead: false },
+    { userId: userPimpinan.id, title: 'Laporan Bulanan Tersedia', message: 'Laporan pengeluaran service bulan ini sudah bisa diakses', type: 'INFO', isRead: false },
+    { userId: userPimpinan.id, title: 'Anggaran Mendekati Batas', message: 'Anggaran kendaraan D 0123 OP tahun 2025 telah terpakai lebih dari 90%', type: 'WARNING', isRead: false },
   ]
 
   for (const n of notifications) {
@@ -638,6 +663,7 @@ async function main() {
     { key: 'email_instansi', value: 'bkad@surabaya.go.id' },
     { key: 'batas_anggaran_peringatan', value: '80' },
     { key: 'estimasi_service_hari', value: '7' },
+    { key: 'bengkel_can_create_service', value: 'false' },
   ]
 
   for (const s of settings) {

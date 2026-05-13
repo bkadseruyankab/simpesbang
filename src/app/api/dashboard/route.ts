@@ -8,9 +8,17 @@ export async function GET(request: NextRequest) {
     const bulan = searchParams.get('bulan') || ''
     const jenisKendaraan = searchParams.get('jenisKendaraan') || ''
 
-    // Base vehicle filter
-    const vehicleWhere: Record<string, unknown> = { isActive: true }
-    if (jenisKendaraan) vehicleWhere.jenisKendaraan = jenisKendaraan
+    // Role-based filtering parameters
+    const role = searchParams.get('role') || 'ADMIN'
+    const bengkelId = searchParams.get('bengkelId') || ''
+    const userId = searchParams.get('userId') || ''
+
+    const isBengkel = role === 'BENGKEL' && bengkelId
+    const isPimpinan = role === 'PIMPINAN'
+
+    // ---------------------------------------------------------------------------
+    // Build where clauses with role-based filters
+    // ---------------------------------------------------------------------------
 
     // Base service filter
     const serviceWhere: Record<string, unknown> = { isDeleted: false }
@@ -23,26 +31,77 @@ export async function GET(request: NextRequest) {
       const endDate = new Date(tahun, monthInt, 1)
       serviceWhere.tanggalService = { gte: startDate, lt: endDate }
     }
+    // BENGKEL role: only their own services
+    if (isBengkel) {
+      serviceWhere.bengkelId = bengkelId
+    }
 
+    // Base vehicle filter
+    const vehicleWhere: Record<string, unknown> = { isActive: true }
+    if (jenisKendaraan) vehicleWhere.jenisKendaraan = jenisKendaraan
+
+    // Base workshop filter
+    const workshopWhere: Record<string, unknown> = { statusAktif: true }
+    if (isBengkel) {
+      workshopWhere.id = bengkelId
+    }
+
+    // Base budget filter
+    const budgetWhere: Record<string, unknown> = { tahun }
+    if (isBengkel) {
+      // Only show budgets for vehicles that have been serviced by this bengkel
+      budgetWhere.vehicle = {
+        services: {
+          some: { bengkelId, isDeleted: false },
+        },
+      }
+    }
+
+    // Notification filter
+    const notificationWhere: Record<string, unknown> = { isRead: false }
+    if (userId) {
+      notificationWhere.userId = userId
+    }
+
+    // ---------------------------------------------------------------------------
     // Fetch data in parallel
+    // ---------------------------------------------------------------------------
     const [vehicles, services, workshops, budgets, notifications] = await Promise.all([
       db.vehicle.findMany({ where: vehicleWhere }),
       db.service.findMany({
         where: serviceWhere,
         include: { vehicle: true, bengkel: true, items: true, history: true },
       }),
-      db.workshop.findMany({ where: { statusAktif: true } }),
-      db.budget.findMany({ where: { tahun } }),
+      db.workshop.findMany({ where: workshopWhere }),
+      db.budget.findMany({
+        where: budgetWhere,
+        include: { vehicle: true },
+      }),
       db.notification.findMany({
-        where: { isRead: false },
+        where: notificationWhere,
         orderBy: { createdAt: 'desc' },
         take: 5,
       }),
     ])
 
+    // ---------------------------------------------------------------------------
+    // BENGKEL role: further filter vehicles to only those with services at this bengkel
+    // ---------------------------------------------------------------------------
+    let filteredVehicles = vehicles
+    if (isBengkel) {
+      const vehicleIdsWithBengkelServices = new Set(
+        services.map(s => s.vehicleId)
+      )
+      filteredVehicles = vehicles.filter(v => vehicleIdsWithBengkelServices.has(v.id))
+    }
+
+    // ---------------------------------------------------------------------------
+    // Compute statistics
+    // ---------------------------------------------------------------------------
+
     // Vehicle stats
-    const totalKendaraanRoda2 = vehicles.filter(v => v.jenisKendaraan === 'RODA_2').length
-    const totalKendaraanRoda4 = vehicles.filter(v => v.jenisKendaraan === 'RODA_4').length
+    const totalKendaraanRoda2 = filteredVehicles.filter(v => v.jenisKendaraan === 'RODA_2').length
+    const totalKendaraanRoda4 = filteredVehicles.filter(v => v.jenisKendaraan === 'RODA_4').length
 
     // Service stats
     const kendaraanAktifService = services.filter(s =>
@@ -97,7 +156,9 @@ export async function GET(request: NextRequest) {
     const alertOverBudget = budgets
       .filter(b => b.realisasi > b.totalAnggaran * 0.7)
       .map(b => {
-        const vehicle = vehicles.find(v => v.id === b.vehicleId)
+        // Budget query includes { vehicle: true }, so b.vehicle is available
+        const vehicle = (b as Record<string, unknown> & { vehicle?: { nomorPolisi?: string } }).vehicle
+          || filteredVehicles.find(v => v.id === b.vehicleId)
         return {
           nomorPolisi: vehicle?.nomorPolisi || '-',
           total: b.realisasi,
@@ -136,7 +197,26 @@ export async function GET(request: NextRequest) {
         estimasiLamaPerbaikan: s.estimasiLamaPerbaikan,
       }))
 
+    // ---------------------------------------------------------------------------
+    // Notification count for bengkel user
+    // ---------------------------------------------------------------------------
+    let notifikasiCount = 0
+    if (userId) {
+      notifikasiCount = await db.notification.count({
+        where: { userId, isRead: false },
+      })
+    }
+
+    // ---------------------------------------------------------------------------
+    // Build response with role context
+    // ---------------------------------------------------------------------------
     return NextResponse.json({
+      // Role context for the frontend
+      userRole: role,
+      bengkelId: isBengkel ? bengkelId : null,
+      readOnly: isPimpinan,
+
+      // Stats
       totalKendaraanRoda2,
       totalKendaraanRoda4,
       kendaraanAktifService,
@@ -144,10 +224,17 @@ export async function GET(request: NextRequest) {
       totalAnggaranTahun: totalAnggaran,
       totalAnggaranTerpakai,
       sisaAnggaran,
+
+      // Charts & lists
       pengeluaranBulanan,
       kendaraanSeringService,
       statistikBengkel,
+
+      // Notifications
       notifikasiTerbaru: notifications,
+      notifikasiCount,
+
+      // Alerts
       alertOverBudget,
       alertTerlambat,
       progressPerbaikan,

@@ -1,0 +1,264 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  password     String
+  role         String   @default("ADMIN") // SUPER_ADMIN, ADMIN, BENGKEL, PIMPINAN
+  phone        String?
+  isActive     Boolean  @default(true)
+  bengkelId    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  bengkel      Workshop?  @relation(fields: [bengkelId], references: [id])
+  notifications Notification[] @relation("UserNotifications")
+  auditLogs    AuditLog[]
+  budgetHistories BudgetHistory[]
+
+  @@map("users")
+}
+
+model Vehicle {
+  id               String   @id @default(cuid())
+  nomorPolisi      String   @unique
+  namaPengguna     String
+  skpdBidang       String
+  jenisKendaraan   String   // RODA_2, RODA_4
+  merk             String
+  type             String
+  tahun            Int
+  nomorRangka      String?
+  nomorMesin       String?
+  warna            String?
+  statusKendaraan  String   @default("AKTIF") // AKTIF, NONAKTIF, RUSAK
+  kondisiKendaraan String   @default("BAIK") // BAIK, KURANG_BAIK, RUSAK
+  kilometerTerakhir Int     @default(0)
+  fotoUrl          String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  documents    VehicleDocument[]
+  services     Service[]
+  budgets      Budget[]
+  serviceHistory ServiceHistory[]
+
+  @@map("vehicles")
+}
+
+model VehicleDocument {
+  id           String   @id @default(cuid())
+  vehicleId    String
+  jenisDokumen String   // BPKB, STNK, FAKTUR, LAINNYA
+  fileName     String
+  filePath     String
+  fileSize     Int?
+  uploadedAt   DateTime @default(now())
+
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("vehicle_documents")
+}
+
+model Service {
+  id                    String    @id @default(cuid())
+  nomorService          String    @unique
+  tanggalService        DateTime
+  vehicleId             String
+  bengkelId             String
+  jenisService          String    // RUTIN, PERBAIKAN, DARURAT
+  keterangan            String?
+  kilometerService      Int       @default(0)
+  estimasiBiaya         Float     @default(0)
+  totalBiaya            Float     @default(0)
+  statusService         String    @default("DIAJUKAN") // DIAJUKAN, DISETUJUI, DITOLAK, DIPROSES, PENDING, SELESAI
+  prioritas             String    @default("NORMAL") // RENDAH, NORMAL, TINGGI, DARURAT
+  estimasiLamaPerbaikan Int?      // dalam hari
+  tanggalSelesai        DateTime?
+  catatanAdmin          String?
+  catatanBengkel        String?
+  progress              Int       @default(0) // 0-100
+  approvedBy            String?
+  approvedAt            DateTime?
+  rejectedReason        String?
+  isDeleted             Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  vehicle      Vehicle        @relation(fields: [vehicleId], references: [id])
+  bengkel      Workshop       @relation(fields: [bengkelId], references: [id])
+  items        ServiceItem[]
+  documents    ServiceDocument[]
+  spareParts   ServiceSparePart[]
+  history      ServiceHistory[]
+
+  @@map("services")
+}
+
+model ServiceItem {
+  id           String  @id @default(cuid())
+  serviceId    String
+  itemName     String
+  quantity     Int     @default(1)
+  hargaSatuan  Float   @default(0)
+  totalHarga   Float   @default(0)
+  keterangan   String?
+
+  service      Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@map("service_items")
+}
+
+model ServiceDocument {
+  id           String   @id @default(cuid())
+  serviceId    String
+  fileName     String
+  filePath     String
+  fileSize     Int?
+  uploadedAt   DateTime @default(now())
+
+  service      Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@map("service_documents")
+}
+
+model Budget {
+  id             String   @id @default(cuid())
+  tahun          Int
+  vehicleId      String
+  totalAnggaran  Float   @default(0)
+  realisasi      Float   @default(0)
+  sisaAnggaran   Float   @default(0)
+  statusAnggaran String  @default("AKTIF") // AKTIF, NONAKTIF, HABIS
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  vehicle        Vehicle         @relation(fields: [vehicleId], references: [id])
+  history        BudgetHistory[]
+
+  @@unique([tahun, vehicleId])
+  @@map("budgets")
+}
+
+model BudgetHistory {
+  id          String   @id @default(cuid())
+  budgetId    String
+  perubahan   Float
+  keterangan  String?
+  changedBy   String?
+  createdAt   DateTime @default(now())
+
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  changedByUser User?  @relation(fields: [changedBy], references: [id])
+
+  @@map("budget_histories")
+}
+
+model Workshop {
+  id           String   @id @default(cuid())
+  namaBengkel  String
+  alamat       String?
+  noTelepon    String?
+  picBengkel   String?
+  email        String?
+  statusAktif  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  services     Service[]
+  users        User[]
+
+  @@map("workshops")
+}
+
+model SparePart {
+  id             String   @id @default(cuid())
+  namaSukuCadang String
+  qty            Int      @default(0)
+  hargaSatuan    Float    @default(0)
+  supplier       String?
+  stok           Int      @default(0)
+  keterangan     String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  serviceSpareParts ServiceSparePart[]
+
+  @@map("spare_parts")
+}
+
+model ServiceSparePart {
+  id           String    @id @default(cuid())
+  serviceId    String
+  sparePartId  String
+  qty          Int       @default(1)
+  hargaSatuan  Float     @default(0)
+  totalHarga   Float     @default(0)
+
+  service      Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  sparePart    SparePart @relation(fields: [sparePartId], references: [id])
+
+  @@map("service_spare_parts")
+}
+
+model ServiceHistory {
+  id          String   @id @default(cuid())
+  serviceId   String
+  vehicleId   String
+  status      String
+  keterangan  String?
+  changedBy   String?
+  createdAt   DateTime @default(now())
+
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("service_histories")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, WARNING, ERROR, SUCCESS
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String?
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}

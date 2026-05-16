@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { unlink } from 'fs/promises'
-import path from 'path'
 
 type RouteContext = { params: Promise<{ id: string; itemId: string; photoId: string }> }
 
@@ -26,15 +24,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Foto tidak ditemukan' }, { status: 404 })
     }
 
-    // Try to delete file from disk
-    try {
-      const fullPath = path.join(process.cwd(), 'public', photo.filePath)
-      await unlink(fullPath)
-    } catch {
-      // File may not exist on disk, continue to delete DB record
-      console.warn('File not found on disk:', photo.filePath)
-    }
-
+    // Delete from database (blob data is stored in the record, so it gets deleted too)
     await db.serviceItemPhoto.delete({
       where: { id: photoId },
     })

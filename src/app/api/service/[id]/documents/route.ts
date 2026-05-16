@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { writeFile, mkdir } from 'fs/promises'
+import { storeServiceDocument } from '@/lib/blob-store'
+import { unlink } from 'fs/promises'
 import path from 'path'
-import { getCompressionSettings, shouldCompress, compressImage } from '@/lib/compress'
+import { existsSync } from 'fs'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -51,73 +52,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     }
 
-    // Ensure upload directory exists
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'nota')
-    await mkdir(uploadDir, { recursive: true })
-
-    // Get compression settings
-    const compressionSettings = await getCompressionSettings()
-
     const documents = []
+    let totalSaved = 0
     for (const file of files) {
-      const timestamp = Date.now()
-      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const result = await storeServiceDocument(id, file, jenisDokumen)
+      totalSaved += result.savedBytes
 
-      // Get file buffer
-      let buffer = Buffer.from(await file.arrayBuffer())
-      let finalMimeType = file.type
-      let finalFileSize = file.size
-
-      // Apply compression for images
-      if (shouldCompress(compressionSettings, file.type, 'document')) {
-        const result = await compressImage(buffer, file.type, compressionSettings)
-        buffer = result.buffer
-        finalMimeType = result.metadata.format || file.type
-        finalFileSize = buffer.length
-
-        // Update compression stats
-        if (result.metadata.wasCompressed) {
-          try {
-            await db.systemSetting.upsert({
-              where: { key: 'compress_total_saved' },
-              update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_saved' } }))?.value || '0') + result.metadata.savedBytes).toString() },
-              create: { key: 'compress_total_saved', value: result.metadata.savedBytes.toString() },
-            })
-            await db.systemSetting.upsert({
-              where: { key: 'compress_total_files' },
-              update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_files' } }))?.value || '0') + 1).toString() },
-              create: { key: 'compress_total_files', value: '1' },
-            })
-          } catch {
-            // Ignore stats update errors
-          }
-        }
-      }
-
-      // Build filename with correct extension
-      let uniqueName = `${timestamp}-${sanitizedName}`
-      if (finalMimeType === 'image/webp' && !sanitizedName.endsWith('.webp')) {
-        const baseName = sanitizedName.replace(/\.[^.]+$/, '')
-        uniqueName = `${timestamp}-${baseName}.webp`
-      } else if (finalMimeType === 'image/jpeg' && !sanitizedName.match(/\.(jpg|jpeg)$/)) {
-        const baseName = sanitizedName.replace(/\.[^.]+$/, '')
-        uniqueName = `${timestamp}-${baseName}.jpg`
-      }
-
-      const filePath = path.join(uploadDir, uniqueName)
-      await writeFile(filePath, buffer)
-
-      const doc = await db.serviceDocument.create({
-        data: {
-          serviceId: id,
-          fileName: file.name,
-          filePath: `/uploads/nota/${uniqueName}`,
-          fileSize: finalFileSize,
-          fileType: finalMimeType,
-          jenisDokumen,
-        },
+      documents.push({
+        id: result.id,
+        serviceId: id,
+        fileName: result.fileName,
+        filePath: result.filePath,
+        fileSize: result.fileSize,
+        fileType: result.mimeType,
+        jenisDokumen,
+        uploadedAt: new Date().toISOString(),
       })
-      documents.push(doc)
     }
 
     return NextResponse.json({ data: documents }, { status: 201 })
@@ -140,6 +90,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const documents = await db.serviceDocument.findMany({
       where: { serviceId: id },
       orderBy: { uploadedAt: 'desc' },
+      // Don't select the blob data for listing (too large)
+      select: {
+        id: true,
+        serviceId: true,
+        fileName: true,
+        filePath: true,
+        fileSize: true,
+        fileType: true,
+        jenisDokumen: true,
+        uploadedAt: true,
+      },
     })
 
     return NextResponse.json({ data: documents })

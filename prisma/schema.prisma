@@ -62,6 +62,8 @@ model VehicleDocument {
   fileName     String
   filePath     String
   fileSize     Int?
+  mimeType     String?  // MIME type for blob serving
+  data         Bytes?   // Blob data stored in database
   uploadedAt   DateTime @default(now())
 
   vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -126,6 +128,8 @@ model ServiceItemPhoto {
   filePath     String
   fileSize     Int?
   fileType     String?
+  mimeType     String?  // MIME type for blob serving
+  data         Bytes?   // Blob data stored in database
   keterangan   String?
   uploadedAt   DateTime @default(now())
 
@@ -141,6 +145,8 @@ model ServiceDocument {
   filePath      String
   fileSize      Int?
   fileType      String?   // MIME type
+  mimeType      String?   // MIME type for blob serving
+  data          Bytes?    // Blob data stored in database
   jenisDokumen  String    @default("NOTA") // NOTA, KWITANSI, FAKTUR, LAINNYA
   uploadedAt    DateTime @default(now())
 
@@ -210,6 +216,8 @@ model WorkshopDocument {
   filePath        String
   fileSize        Int?
   fileType        String?  // MIME type
+  mimeType        String?  // MIME type for blob serving
+  data            Bytes?   // Blob data stored in database
   keterangan      String?
   uploadedBy      String?  // userId who uploaded
   uploadedAt      DateTime @default(now())
@@ -302,4 +310,17 @@ model SystemSetting {
   updatedAt DateTime @updatedAt
 
   @@map("system_settings")
+}
+
+model BlobFile {
+  id        String   @id @default(cuid())
+  key       String   @unique  // e.g., "app_logo", "app_favicon"
+  fileName  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("blob_files")
 }

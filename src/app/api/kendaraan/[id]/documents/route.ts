@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { writeFile, mkdir } from 'fs/promises'
-import path from 'path'
-import { getCompressionSettings, shouldCompress, compressImage } from '@/lib/compress'
+import { storeVehicleDocument } from '@/lib/blob-store'
 
 export async function GET(
   request: NextRequest,
@@ -13,6 +11,17 @@ export async function GET(
     const documents = await db.vehicleDocument.findMany({
       where: { vehicleId: id },
       orderBy: { uploadedAt: 'desc' },
+      // Don't select the blob data for listing (too large)
+      select: {
+        id: true,
+        vehicleId: true,
+        jenisDokumen: true,
+        fileName: true,
+        filePath: true,
+        fileSize: true,
+        mimeType: true,
+        uploadedAt: true,
+      },
     })
 
     return NextResponse.json(documents)
@@ -58,74 +67,34 @@ export async function POST(
       )
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'documents')
-    await mkdir(uploadsDir, { recursive: true })
-
-    // Get file buffer
-    const bytes = await file.arrayBuffer()
-    let buffer = Buffer.from(bytes)
-    let finalMimeType = file.type
-    let finalFileSize = file.size
-
-    // Apply compression for images
-    const compressionSettings = await getCompressionSettings()
-    if (shouldCompress(compressionSettings, file.type, 'document')) {
-      const result = await compressImage(buffer, file.type, compressionSettings)
-      buffer = result.buffer
-      finalMimeType = result.metadata.format || file.type
-      finalFileSize = buffer.length
-
-      // Update compression stats
-      if (result.metadata.wasCompressed) {
-        try {
-          await db.systemSetting.upsert({
-            where: { key: 'compress_total_saved' },
-            update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_saved' } }))?.value || '0') + result.metadata.savedBytes).toString() },
-            create: { key: 'compress_total_saved', value: result.metadata.savedBytes.toString() },
-          })
-          await db.systemSetting.upsert({
-            where: { key: 'compress_total_files' },
-            update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_files' } }))?.value || '0') + 1).toString() },
-            create: { key: 'compress_total_files', value: '1' },
-          })
-        } catch {
-          // Ignore stats update errors
-        }
-      }
+    // Validate file
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf']
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json(
+        { error: 'Tipe file tidak didukung. Gunakan JPG, PNG, atau PDF' },
+        { status: 400 }
+      )
+    }
+    if (file.size > maxSize) {
+      return NextResponse.json(
+        { error: 'File melebihi batas 5MB' },
+        { status: 400 }
+      )
     }
 
-    // Generate unique filename
-    const timestamp = Date.now()
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    let fileName = `${timestamp}_${sanitizedName}`
+    const result = await storeVehicleDocument(id, file, jenisDokumen)
 
-    // If format changed due to compression, update the extension
-    if (finalMimeType === 'image/webp' && !sanitizedName.endsWith('.webp')) {
-      const baseName = sanitizedName.replace(/\.[^.]+$/, '')
-      fileName = `${timestamp}_${baseName}.webp`
-    } else if (finalMimeType === 'image/jpeg' && !sanitizedName.match(/\.(jpg|jpeg)$/)) {
-      const baseName = sanitizedName.replace(/\.[^.]+$/, '')
-      fileName = `${timestamp}_${baseName}.jpg`
-    }
-
-    const filePath = path.join(uploadsDir, fileName)
-
-    // Write file
-    await writeFile(filePath, buffer)
-
-    // Save document record
-    const document = await db.vehicleDocument.create({
-      data: {
-        vehicleId: id,
-        jenisDokumen,
-        fileName: file.name,
-        filePath: `/uploads/documents/${fileName}`,
-        fileSize: finalFileSize,
-      },
-    })
-
-    return NextResponse.json(document, { status: 201 })
+    return NextResponse.json({
+      id: result.id,
+      vehicleId: id,
+      jenisDokumen,
+      fileName: result.fileName,
+      filePath: result.filePath,
+      fileSize: result.fileSize,
+      mimeType: result.mimeType,
+      uploadedAt: new Date().toISOString(),
+    }, { status: 201 })
   } catch (error) {
     console.error('Error uploading document:', error)
     return NextResponse.json(

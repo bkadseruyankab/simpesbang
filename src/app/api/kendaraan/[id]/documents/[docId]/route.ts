@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { unlink } from 'fs/promises'
-import path from 'path'
 
 export async function DELETE(
   request: NextRequest,
@@ -22,16 +20,7 @@ export async function DELETE(
       )
     }
 
-    // Delete file from filesystem
-    try {
-      const fullPath = path.join(process.cwd(), 'public', document.filePath)
-      await unlink(fullPath)
-    } catch {
-      // File might already be deleted, continue with DB deletion
-      console.warn('File not found on disk, continuing with DB deletion')
-    }
-
-    // Delete from database
+    // Delete from database (blob data is stored in the record, so it gets deleted too)
     await db.vehicleDocument.delete({
       where: { id: docId },
     })

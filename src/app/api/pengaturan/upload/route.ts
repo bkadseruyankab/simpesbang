@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { writeFile, unlink } from 'fs/promises'
-import { existsSync } from 'fs'
-import path from 'path'
-import { getCompressionSettings, shouldCompress, compressImage } from '@/lib/compress'
+import { storeBlobFile } from '@/lib/blob-store'
 
 const LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml']
 const LOGO_MAX_SIZE = 2 * 1024 * 1024 // 2MB
@@ -60,86 +56,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get file buffer
-    const bytes = await file.arrayBuffer()
-    let buffer = Buffer.from(bytes)
-    let finalMimeType = file.type
-
-    // Apply compression for images (skip SVG)
-    const compressionSettings = await getCompressionSettings()
-    if (shouldCompress(compressionSettings, file.type, 'logo') && file.type !== 'image/svg+xml') {
-      const result = await compressImage(buffer, file.type, compressionSettings)
-      buffer = result.buffer
-      finalMimeType = result.metadata.format || file.type
-
-      // Update compression stats
-      if (result.metadata.wasCompressed) {
-        try {
-          await db.systemSetting.upsert({
-            where: { key: 'compress_total_saved' },
-            update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_saved' } }))?.value || '0') + result.metadata.savedBytes).toString() },
-            create: { key: 'compress_total_saved', value: result.metadata.savedBytes.toString() },
-          })
-          await db.systemSetting.upsert({
-            where: { key: 'compress_total_files' },
-            update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_files' } }))?.value || '0') + 1).toString() },
-            create: { key: 'compress_total_files', value: '1' },
-          })
-        } catch {
-          // Ignore stats update errors
-        }
-      }
-    }
-
-    // Build unique filename - adjust extension based on output format
-    const timestamp = Date.now()
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    let uniqueFilename = `${type}-${timestamp}-${sanitizedName}`
-
-    // If format changed due to compression, update the extension
-    if (finalMimeType === 'image/webp' && !sanitizedName.endsWith('.webp')) {
-      const baseName = sanitizedName.replace(/\.[^.]+$/, '')
-      uniqueFilename = `${type}-${timestamp}-${baseName}.webp`
-    } else if (finalMimeType === 'image/jpeg' && !sanitizedName.match(/\.(jpg|jpeg)$/)) {
-      const baseName = sanitizedName.replace(/\.[^.]+$/, '')
-      uniqueFilename = `${type}-${timestamp}-${baseName}.jpg`
-    }
-
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'settings')
-    const fullFilePath = path.join(uploadsDir, uniqueFilename)
-    const relativePath = `/uploads/settings/${uniqueFilename}`
-
-    // Check for existing file in SystemSetting and delete it
+    // Store as blob file in database (with compression for non-SVG)
     const settingKey = SETTING_KEY_MAP[type]
-    const existingSetting = await db.systemSetting.findUnique({
-      where: { key: settingKey },
-    })
+    const context = type === 'logo' ? 'logo' : 'favicon'
 
-    if (existingSetting?.value) {
-      const oldFilePath = path.join(process.cwd(), 'public', existingSetting.value)
-      if (existsSync(oldFilePath)) {
-        try {
-          await unlink(oldFilePath)
-        } catch {
-          // Ignore errors when deleting old file — it may already be gone
-        }
-      }
-    }
-
-    // Write the (possibly compressed) file
-    await writeFile(fullFilePath, buffer)
-
-    // Upsert the setting in the database
-    await db.systemSetting.upsert({
-      where: { key: settingKey },
-      update: { value: relativePath },
-      create: { key: settingKey, value: relativePath },
-    })
+    const result = await storeBlobFile(settingKey, file, context)
 
     return NextResponse.json({
       success: true,
       key: settingKey,
-      path: relativePath,
+      path: result.filePath,
+      fileSize: result.fileSize,
+      wasCompressed: result.wasCompressed,
+      savedBytes: result.savedBytes,
     })
   } catch (error) {
     console.error('Upload error:', error)

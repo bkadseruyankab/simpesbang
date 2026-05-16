@@ -802,3 +802,39 @@ Stage Summary:
 - 84% compression achieved on test image (35.5KB → 5.5KB, 3000x2000 → 1620x1080)
 - PDF files are not compressed (only images: JPEG, PNG, WebP)
 - SVG files skipped (vector format, not applicable for raster compression)
+
+---
+Task ID: 1
+Agent: Main
+Task: Implement Blob Store + Image/File Compression feature for uploads
+
+Work Log:
+- Updated Prisma schema to add `data` (Bytes) and `mimeType` (String) fields to VehicleDocument, ServiceDocument, ServiceItemPhoto, WorkshopDocument models
+- Created new `BlobFile` model for generic blob storage (app_logo, app_favicon)
+- Ran `db:push` to apply schema changes to SQLite database
+- Created comprehensive blob-store utility (`src/lib/blob-store.ts`) with functions for storing, retrieving, and deleting blob files
+- Created file serving API route (`/api/file/[category]/[id]/route.ts`) that serves files from blob storage with filesystem fallback
+- Updated all upload API routes to use blob storage instead of filesystem:
+  - Service documents (`/api/service/[id]/documents`)
+  - Service item photos (`/api/service/[id]/items/[itemId]/photos`)
+  - Workshop documents (`/api/bengkel/[id]/documents`)
+  - Vehicle documents (`/api/kendaraan/[id]/documents`)
+  - Logo/favicon upload (`/api/pengaturan/upload`)
+- Updated all delete API routes to remove filesystem dependency
+- Created storage stats API (`/api/pengaturan/storage`)
+- Added "Penyimpanan" (Storage) tab to Pengaturan page with:
+  - Total storage, total files, compression savings stats
+  - Visual storage breakdown bar chart
+  - Category-wise storage details
+  - Info section explaining Blob Store benefits
+- Maintained full backward compatibility with existing filesystem uploads
+- Updated compression stats tracking to use atomic SQL operations
+
+Stage Summary:
+- All new uploads now store files as blobs in the database with automatic compression
+- File serving works via `/api/file/{category}/{id}` API route
+- Logo/favicon stored in dedicated `BlobFile` table, served via `/api/file/blob/{key}`
+- Old filesystem-based files continue to work (backward compatible fallback)
+- Storage statistics are viewable in the Pengaturan > Penyimpanan tab
+- No frontend component changes needed (filePath format change is transparent)
+- Deploy-friendly: no filesystem configuration needed

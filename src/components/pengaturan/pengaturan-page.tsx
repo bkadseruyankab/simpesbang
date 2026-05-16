@@ -41,7 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare, Zap, FileDown, TrendingDown, BarChart3, CheckCircle, Camera } from 'lucide-react'
+import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare, Zap, FileDown, TrendingDown, BarChart3, CheckCircle, Camera, HardDrive, FileArchive, Paperclip, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -311,6 +311,17 @@ export function PengaturanPage() {
   const [compressLoaded, setCompressLoaded] = useState(false)
   const [compressStats, setCompressStats] = useState({ totalSaved: 0, totalFiles: 0 })
 
+  // Storage stats state
+  const [storageStats, setStorageStats] = useState<{
+    serviceDocs: { count: number; totalSize: number }
+    servicePhotos: { count: number; totalSize: number }
+    workshopDocs: { count: number; totalSize: number }
+    vehicleDocs: { count: number; totalSize: number }
+    blobFiles: { count: number; totalSize: number }
+    total: { count: number; totalSize: number }
+  } | null>(null)
+  const [storageLoaded, setStorageLoaded] = useState(false)
+
   const handleTestWhatsApp = async () => {
     if (!localSettings.fonnte_api_key) {
       toast.error('API Key Fonnte belum diisi')
@@ -393,6 +404,17 @@ export function PengaturanPage() {
         setCompressLoaded(true)
       })
       .catch(() => setCompressLoaded(true))
+  }
+
+  // Fetch storage stats
+  if (!storageLoaded) {
+    fetch('/api/pengaturan/storage')
+      .then(res => res.json())
+      .then(data => {
+        setStorageStats(data)
+        setStorageLoaded(true)
+      })
+      .catch(() => setStorageLoaded(true))
   }
 
   // Handle save compression settings
@@ -512,6 +534,7 @@ export function PengaturanPage() {
           <TabsTrigger value="users" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Manajemen User</TabsTrigger>
           <TabsTrigger value="audit" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Audit Log</TabsTrigger>
           <TabsTrigger value="compress" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200"><Zap className="h-3.5 w-3.5 mr-1" /> Kompresi</TabsTrigger>
+          <TabsTrigger value="storage" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200"><HardDrive className="h-3.5 w-3.5 mr-1" /> Penyimpanan</TabsTrigger>
           <TabsTrigger value="backup" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Backup & Restore</TabsTrigger>
           <TabsTrigger value="tahun" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Pergantian Tahun</TabsTrigger>
         </TabsList>
@@ -1560,6 +1583,210 @@ export function PengaturanPage() {
                     )}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Tab: Penyimpanan Blob */}
+        <TabsContent value="storage" className="mt-4">
+          <div className="space-y-6">
+            {/* Storage Overview */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Card className="animate-fade-in animate-stagger-1 border border-border/50 shadow-sm rounded-2xl card-hover">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white shrink-0">
+                      <HardDrive className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground tracking-wider uppercase">Total Penyimpanan</p>
+                      <p className="text-xl font-bold">{storageStats ? formatBytes(storageStats.total.totalSize) : '...'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shrink-0">
+                      <Paperclip className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground tracking-wider uppercase">Total File</p>
+                      <p className="text-xl font-bold">{storageStats?.total.count || 0}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="animate-fade-in animate-stagger-3 border border-border/50 shadow-sm rounded-2xl card-hover">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 text-white shrink-0">
+                      <TrendingDown className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground tracking-wider uppercase">Hemat Kompresi</p>
+                      <p className="text-xl font-bold">{formatBytes(compressStats.totalSaved)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Storage Breakdown */}
+            <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <HardDrive className="h-5 w-5 text-teal-500" />
+                  Detail Penyimpanan Blob
+                </CardTitle>
+                <CardDescription>Semua file tersimpan langsung di database (Blob Store) — tidak memerlukan konfigurasi filesystem saat deploy</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {storageStats ? (
+                  <div className="space-y-3">
+                    {/* Progress bar for total storage */}
+                    <div className="rounded-xl border border-border/50 p-4 bg-muted/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Penggunaan Total</span>
+                        <span className="text-sm font-bold">{formatBytes(storageStats.total.totalSize)}</span>
+                      </div>
+                      <div className="h-4 bg-muted rounded-full overflow-hidden flex">
+                        {storageStats.serviceDocs.totalSize > 0 && (
+                          <div
+                            className="h-full bg-gradient-to-r from-teal-500 to-teal-400 transition-all duration-500"
+                            style={{ width: `${(storageStats.serviceDocs.totalSize / Math.max(storageStats.total.totalSize, 1)) * 100}%` }}
+                            title={`Dokumen Service: ${formatBytes(storageStats.serviceDocs.totalSize)}`}
+                          />
+                        )}
+                        {storageStats.servicePhotos.totalSize > 0 && (
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500"
+                            style={{ width: `${(storageStats.servicePhotos.totalSize / Math.max(storageStats.total.totalSize, 1)) * 100}%` }}
+                            title={`Foto Service: ${formatBytes(storageStats.servicePhotos.totalSize)}`}
+                          />
+                        )}
+                        {storageStats.workshopDocs.totalSize > 0 && (
+                          <div
+                            className="h-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-500"
+                            style={{ width: `${(storageStats.workshopDocs.totalSize / Math.max(storageStats.total.totalSize, 1)) * 100}%` }}
+                            title={`Dokumen Bengkel: ${formatBytes(storageStats.workshopDocs.totalSize)}`}
+                          />
+                        )}
+                        {storageStats.vehicleDocs.totalSize > 0 && (
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-purple-400 transition-all duration-500"
+                            style={{ width: `${(storageStats.vehicleDocs.totalSize / Math.max(storageStats.total.totalSize, 1)) * 100}%` }}
+                            title={`Dokumen Kendaraan: ${formatBytes(storageStats.vehicleDocs.totalSize)}`}
+                          />
+                        )}
+                        {storageStats.blobFiles.totalSize > 0 && (
+                          <div
+                            className="h-full bg-gradient-to-r from-rose-500 to-rose-400 transition-all duration-500"
+                            style={{ width: `${(storageStats.blobFiles.totalSize / Math.max(storageStats.total.totalSize, 1)) * 100}%` }}
+                            title={`Logo & Favicon: ${formatBytes(storageStats.blobFiles.totalSize)}`}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Category breakdown */}
+                    <div className="grid gap-2">
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-teal-500" />
+                          <div>
+                            <p className="text-sm font-medium">Dokumen Service</p>
+                            <p className="text-xs text-muted-foreground">Nota, kwitansi, faktur</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold">{formatBytes(storageStats.serviceDocs.totalSize)}</p>
+                          <p className="text-xs text-muted-foreground">{storageStats.serviceDocs.count} file</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
+                        <div className="flex items-center gap-2">
+                          <ImagePlus className="h-4 w-4 text-blue-500" />
+                          <div>
+                            <p className="text-sm font-medium">Foto Item Service</p>
+                            <p className="text-xs text-muted-foreground">Foto perbaikan & service</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold">{formatBytes(storageStats.servicePhotos.totalSize)}</p>
+                          <p className="text-xs text-muted-foreground">{storageStats.servicePhotos.count} file</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
+                        <div className="flex items-center gap-2">
+                          <FileArchive className="h-4 w-4 text-amber-500" />
+                          <div>
+                            <p className="text-sm font-medium">Dokumen Bengkel</p>
+                            <p className="text-xs text-muted-foreground">KTP, NPWP, NIB, dll.</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold">{formatBytes(storageStats.workshopDocs.totalSize)}</p>
+                          <p className="text-xs text-muted-foreground">{storageStats.workshopDocs.count} file</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
+                        <div className="flex items-center gap-2">
+                          <Paperclip className="h-4 w-4 text-purple-500" />
+                          <div>
+                            <p className="text-sm font-medium">Dokumen Kendaraan</p>
+                            <p className="text-xs text-muted-foreground">BPKB, STNK, dll.</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold">{formatBytes(storageStats.vehicleDocs.totalSize)}</p>
+                          <p className="text-xs text-muted-foreground">{storageStats.vehicleDocs.count} file</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
+                        <div className="flex items-center gap-2">
+                          <ImageIcon className="h-4 w-4 text-rose-500" />
+                          <div>
+                            <p className="text-sm font-medium">Logo & Favicon</p>
+                            <p className="text-xs text-muted-foreground">Aset identitas aplikasi</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold">{formatBytes(storageStats.blobFiles.totalSize)}</p>
+                          <p className="text-xs text-muted-foreground">{storageStats.blobFiles.count} file</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Info about Blob Store */}
+                <div className="rounded-xl border border-teal-500/20 bg-teal-50 dark:bg-teal-950/20 p-4">
+                  <div className="flex gap-3">
+                    <HardDrive className="h-5 w-5 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-teal-700 dark:text-teal-300">Blob Store — Penyimpanan Database</p>
+                      <p className="text-xs text-teal-600 dark:text-teal-400">
+                        Semua file yang diupload tersimpan langsung di database sebagai Blob. Ini memudahkan deployment karena tidak memerlukan konfigurasi filesystem, volume mount, atau cloud storage. File secara otomatis dikompresi sebelum disimpan untuk menghemat ruang penyimpanan.
+                      </p>
+                      <ul className="text-xs text-teal-600 dark:text-teal-400 space-y-1 ml-3">
+                        <li>✅ Tidak perlu konfigurasi filesystem saat deploy</li>
+                        <li>✅ File otomatis ter-backup bersama database</li>
+                        <li>✅ Kompresi otomatis untuk gambar</li>
+                        <li>✅ Portabel — cukup salin file database</li>
+                        <li>✅ Aman — file tidak bisa diakses langsung via URL</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>

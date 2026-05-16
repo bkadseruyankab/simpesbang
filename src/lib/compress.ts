@@ -146,10 +146,10 @@ export async function compressImage(
     // Determine output format
     let outputFormat = settings.format
     if (outputFormat === 'original') {
-      // Keep original format, but convert PNG to JPEG if it's a photo/document for better compression
+      // Keep original format for PNGs (they may have transparency)
+      // Only convert to JPEG for JPEG input
       if (mimeType === 'image/png') {
-        // For PNGs, keep as PNG but optimize
-        outputFormat = 'jpeg' // Convert PNG to JPEG for better compression (unless transparency needed)
+        outputFormat = 'png' // Keep PNG as PNG to preserve transparency
       } else if (mimeType === 'image/webp') {
         outputFormat = 'webp'
       } else {
@@ -162,6 +162,12 @@ export async function compressImage(
     let finalFormat: string
 
     switch (outputFormat) {
+      case 'png':
+        compressedBuffer = await pipeline
+          .png({ quality: settings.quality, compressionLevel: 9, effort: 7 })
+          .toBuffer()
+        finalFormat = 'image/png'
+        break
       case 'webp':
         compressedBuffer = await pipeline
           .webp({ quality: settings.quality, effort: 4 })

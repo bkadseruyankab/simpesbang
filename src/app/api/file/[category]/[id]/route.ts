@@ -40,13 +40,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
       // Determine if this should be inline or attachment
       const url = new URL(request.url)
       const download = url.searchParams.get('download') === 'true'
+      const hasCacheBuster = url.searchParams.has('t')
       const isImage = blob.mimeType.startsWith('image/')
       const isPdf = blob.mimeType === 'application/pdf'
 
       const headers = new Headers()
       headers.set('Content-Type', blob.mimeType)
       headers.set('Content-Length', blob.data.length.toString())
-      headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800')
+
+      // For blob category (logo/favicon), use short cache since they can be updated
+      // For other categories with cache buster param, also use short cache
+      if (category === 'blob' || hasCacheBuster) {
+        headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+      } else {
+        headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800')
+      }
 
       if (download || (!isImage && !isPdf)) {
         headers.set('Content-Disposition', `attachment; filename="${blob.fileName}"`)

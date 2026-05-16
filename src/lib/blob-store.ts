@@ -41,6 +41,18 @@ export async function compressBuffer(
   originalSize: number
 }> {
   const originalSize = buffer.length
+
+  // Skip compression for very small files (< 1KB) - not worth the overhead
+  if (originalSize < 1024) {
+    return { buffer, mimeType, wasCompressed: false, savedBytes: 0, originalSize }
+  }
+
+  // Skip compression for logos - they often have transparency and are usually small
+  // Converting PNG logos to JPEG would break transparency
+  if (context === 'logo') {
+    return { buffer, mimeType, wasCompressed: false, savedBytes: 0, originalSize }
+  }
+
   const settings = await getCompressionSettings()
 
   if (!shouldCompress(settings, mimeType, context)) {

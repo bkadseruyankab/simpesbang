@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { storeBlobFile } from '@/lib/blob-store'
 
-const LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml']
+const LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/webp']
 const LOGO_MAX_SIZE = 2 * 1024 * 1024 // 2MB
 
 const FAVICON_ALLOWED_TYPES = ['image/x-icon', 'image/png', 'image/svg+xml']
@@ -10,6 +10,23 @@ const FAVICON_MAX_SIZE = 1 * 1024 * 1024 // 1MB
 const SETTING_KEY_MAP: Record<string, string> = {
   logo: 'app_logo',
   favicon: 'app_favicon',
+}
+
+/**
+ * Detect MIME type from file extension when browser doesn't provide it
+ */
+function detectMimeType(fileName: string): string | null {
+  const ext = fileName.toLowerCase().split('.').pop()
+  const mimeMap: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    svg: 'image/svg+xml',
+    ico: 'image/x-icon',
+    webp: 'image/webp',
+    gif: 'image/gif',
+  }
+  return ext ? mimeMap[ext] || null : null
 }
 
 export async function POST(request: NextRequest) {
@@ -21,7 +38,7 @@ export async function POST(request: NextRequest) {
     // Validate type
     if (!type || (type !== 'logo' && type !== 'favicon')) {
       return NextResponse.json(
-        { success: false, message: 'Invalid type. Must be "logo" or "favicon".' },
+        { success: false, error: 'Invalid type. Must be "logo" or "favicon".' },
         { status: 400 }
       )
     }
@@ -29,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Validate file
     if (!file) {
       return NextResponse.json(
-        { success: false, message: 'No file provided.' },
+        { success: false, error: 'No file provided.' },
         { status: 400 }
       )
     }
@@ -38,11 +55,20 @@ export async function POST(request: NextRequest) {
     const allowedTypes = type === 'logo' ? LOGO_ALLOWED_TYPES : FAVICON_ALLOWED_TYPES
     const maxSize = type === 'logo' ? LOGO_MAX_SIZE : FAVICON_MAX_SIZE
 
-    if (!allowedTypes.includes(file.type)) {
+    // Try to detect MIME type: first from file.type, then from file extension
+    let mimeType = file.type
+    if (!mimeType || !allowedTypes.includes(mimeType)) {
+      const detected = detectMimeType(file.name)
+      if (detected && allowedTypes.includes(detected)) {
+        mimeType = detected
+      }
+    }
+
+    if (!allowedTypes.includes(mimeType)) {
       return NextResponse.json(
         {
           success: false,
-          message: `Invalid file type "${file.type}". Allowed types: ${allowedTypes.join(', ')}`,
+          error: `Tipe file "${file.type || 'unknown'}" tidak didukung. Tipe yang diperbolehkan: ${allowedTypes.join(', ')}`,
         },
         { status: 400 }
       )
@@ -51,7 +77,7 @@ export async function POST(request: NextRequest) {
     if (file.size > maxSize) {
       const maxMB = (maxSize / (1024 * 1024)).toFixed(0)
       return NextResponse.json(
-        { success: false, message: `File size exceeds the ${maxMB}MB limit.` },
+        { success: false, error: `Ukuran file melebihi batas ${maxMB}MB.` },
         { status: 400 }
       )
     }
@@ -60,7 +86,12 @@ export async function POST(request: NextRequest) {
     const settingKey = SETTING_KEY_MAP[type]
     const context = type === 'logo' ? 'logo' : 'favicon'
 
-    const result = await storeBlobFile(settingKey, file, context)
+    // Create a new File with the correct MIME type if we detected it from extension
+    const fileToStore = mimeType !== file.type
+      ? new File([file], file.name, { type: mimeType })
+      : file
+
+    const result = await storeBlobFile(settingKey, fileToStore, context)
 
     return NextResponse.json({
       success: true,
@@ -72,8 +103,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Upload error:', error)
+    const message = error instanceof Error ? error.message : 'Internal server error during file upload.'
     return NextResponse.json(
-      { success: false, message: 'Internal server error during file upload.' },
+      { success: false, error: message },
       { status: 500 }
     )
   }

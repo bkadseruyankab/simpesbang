@@ -103,10 +103,11 @@ function SidebarContent({
       const res = await fetch('/api/pengaturan')
       return res.json()
     },
-    staleTime: 60000,
+    staleTime: 30000, // Refresh every 30 seconds
+    refetchInterval: 60000, // Auto-refetch every minute
   })
 
-  const appLogo = appSettings?.app_logo
+  const appLogo = appSettings?.app_logo || null
   const appShortName = appSettings?.app_short_name || 'BKAD'
   const appDesc = appSettings?.app_description || 'Service Kendaraan'
 
@@ -163,7 +164,20 @@ function SidebarContent({
         <div className="absolute inset-0 bg-gradient-to-r from-primary/[0.03] to-transparent" />
         {appLogo ? (
           <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-black/[0.04] overflow-hidden z-[1]">
-            <img src={appLogo} alt="Logo" className="h-8 w-8 object-contain" />
+            <img
+              key={appLogo}
+              src={appLogo}
+              alt="Logo"
+              className="h-8 w-8 object-contain"
+              onError={(e) => {
+                // Fallback to default icon if logo fails to load
+                e.currentTarget.style.display = 'none'
+                const parent = e.currentTarget.parentElement
+                if (parent) {
+                  parent.innerHTML = '<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 shadow-md"><svg class="h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>'
+                }
+              }}
+            />
           </div>
         ) : (
           <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 shadow-md z-[1]">

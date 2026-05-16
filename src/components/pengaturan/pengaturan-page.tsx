@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -66,6 +66,14 @@ export function PengaturanPage() {
   const [editingUser, setEditingUser] = useState<any>(null)
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '', isActive: true })
 
+  // Refs for file inputs
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const faviconInputRef = useRef<HTMLInputElement>(null)
+
+  // Cache-busting timestamp for logo/favicon
+  const [logoTimestamp, setLogoTimestamp] = useState(Date.now())
+  const [faviconTimestamp, setFaviconTimestamp] = useState(Date.now())
+
   // Fetch settings
   const { data: settings = {}, isLoading: loadingSettings } = useQuery({
     queryKey: ['pengaturan'],
@@ -124,6 +132,7 @@ export function PengaturanPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
+      queryClient.invalidateQueries({ queryKey: ['app-settings-sidebar'] })
       toast.success('Pengaturan berhasil disimpan')
     },
     onError: () => {
@@ -378,12 +387,30 @@ export function PengaturanPage() {
 
   const [localSettings, setLocalSettings] = useState<Record<string, string>>({})
 
-  // Sync settings when loaded
-  const [settingsLoaded, setSettingsLoaded] = useState(false)
-  if (!settingsLoaded && Object.keys(settings).length > 0) {
-    setLocalSettings({ ...settings })
-    setSettingsLoaded(true)
-  }
+  // Sync settings when loaded - use useEffect to avoid race conditions
+  useEffect(() => {
+    if (Object.keys(settings).length > 0) {
+      setLocalSettings(prev => {
+        // Merge: keep any locally-updated values (like just-uploaded logo paths)
+        // but update with server values for everything else
+        const merged = { ...settings }
+        // Preserve locally-set app_logo and app_favicon if they differ from server
+        // (this handles the race condition between upload and query invalidation)
+        if (prev.app_logo && prev.app_logo !== settings.app_logo) {
+          // If local has a blob URL but server doesn't, keep local
+          if (prev.app_logo.startsWith('/api/file/') && !settings.app_logo?.startsWith('/api/file/')) {
+            merged.app_logo = prev.app_logo
+          }
+        }
+        if (prev.app_favicon && prev.app_favicon !== settings.app_favicon) {
+          if (prev.app_favicon.startsWith('/api/file/') && !settings.app_favicon?.startsWith('/api/file/')) {
+            merged.app_favicon = prev.app_favicon
+          }
+        }
+        return merged
+      })
+    }
+  }, [settings])
 
   // Fetch compression settings
   if (!compressLoaded) {
@@ -467,7 +494,16 @@ export function PengaturanPage() {
     const keys = sectionKeys[section] || []
     const updateData: Record<string, string> = {}
     keys.forEach(k => {
-      if (localSettings[k] !== undefined) updateData[k] = localSettings[k]
+      if (localSettings[k] !== undefined) {
+        // Strip cache-busting query params from blob URLs before saving to DB
+        // e.g., "/api/file/blob/app_logo?t=123" -> "/api/file/blob/app_logo"
+        const val = localSettings[k]
+        if (val.startsWith('/api/file/') && val.includes('?')) {
+          updateData[k] = val.split('?')[0]
+        } else {
+          updateData[k] = val
+        }
+      }
     })
     updateSettings.mutate(updateData)
   }
@@ -480,12 +516,22 @@ export function PengaturanPage() {
       formData.append('type', type)
       const res = await fetch('/api/pengaturan/upload', { method: 'POST', body: formData })
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || err.message || 'Gagal mengupload')
+        let errorMsg = 'Gagal mengupload'
+        try {
+          const err = await res.json()
+          errorMsg = err.error || err.message || errorMsg
+        } catch {}
+        throw new Error(errorMsg)
       }
       const data = await res.json()
-      setLocalSettings(s => ({ ...s, [data.key]: data.path }))
+      // Add cache-busting timestamp to the URL so browser fetches fresh image
+      const cacheBustedPath = data.path + '?t=' + Date.now()
+      setLocalSettings(s => ({ ...s, [data.key]: cacheBustedPath }))
+      // Update timestamp state for immediate visual refresh
+      if (type === 'logo') setLogoTimestamp(Date.now())
+      else setFaviconTimestamp(Date.now())
       queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
+      queryClient.invalidateQueries({ queryKey: ['app-settings-sidebar'] })
       toast.success(`${type === 'logo' ? 'Logo' : 'Favicon'} berhasil diupload`, { id: `upload-${type}` })
     } catch (err: any) {
       toast.error(err.message || `Gagal mengupload ${type}`, { id: `upload-${type}` })
@@ -635,24 +681,36 @@ export function PengaturanPage() {
                     <div className="flex items-center gap-4">
                       <div className="h-20 w-20 rounded-full border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0">
                         {localSettings.app_logo ? (
-                          <img src={localSettings.app_logo} alt="Logo" className="h-20 w-20 rounded-full object-cover" />
+                          <img
+                            key={logoTimestamp}
+                            src={localSettings.app_logo}
+                            alt="Logo"
+                            className="h-20 w-20 rounded-full object-cover"
+                            onError={(e) => {
+                              // If image fails to load, try without cache busting
+                              const img = e.currentTarget
+                              if (!img.src.includes('onerror=1')) {
+                                img.src = localSettings.app_logo?.split('?')[0] + '?onerror=1&t=' + Date.now()
+                              }
+                            }}
+                          />
                         ) : (
                           <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
                         )}
                       </div>
                       <div className="space-y-2">
                         <input
+                          ref={logoInputRef}
                           type="file"
                           accept="image/jpeg,image/png,image/svg+xml"
                           className="hidden"
-                          id="logo-upload"
                           onChange={(e) => {
                             const file = e.target.files?.[0]
                             if (file) handleFileUpload(file, 'logo')
                             e.target.value = ''
                           }}
                         />
-                        <Button variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
+                        <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
                           <Upload className="h-4 w-4 mr-1" /> Upload Logo
                         </Button>
                         <p className="text-xs text-muted-foreground">JPG, PNG, atau SVG. Maks 2MB.</p>
@@ -668,24 +726,35 @@ export function PengaturanPage() {
                     <div className="flex items-center gap-4">
                       <div className="h-8 w-8 border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0">
                         {localSettings.app_favicon ? (
-                          <img src={localSettings.app_favicon} alt="Favicon" className="h-8 w-8 object-cover" />
+                          <img
+                            key={faviconTimestamp}
+                            src={localSettings.app_favicon}
+                            alt="Favicon"
+                            className="h-8 w-8 object-cover"
+                            onError={(e) => {
+                              const img = e.currentTarget
+                              if (!img.src.includes('onerror=1')) {
+                                img.src = localSettings.app_favicon?.split('?')[0] + '?onerror=1&t=' + Date.now()
+                              }
+                            }}
+                          />
                         ) : (
                           <Globe className="h-4 w-4 text-muted-foreground/40" />
                         )}
                       </div>
                       <div className="space-y-2">
                         <input
+                          ref={faviconInputRef}
                           type="file"
                           accept="image/x-icon,image/png,image/svg+xml"
                           className="hidden"
-                          id="favicon-upload"
                           onChange={(e) => {
                             const file = e.target.files?.[0]
                             if (file) handleFileUpload(file, 'favicon')
                             e.target.value = ''
                           }}
                         />
-                        <Button variant="outline" size="sm" onClick={() => document.getElementById('favicon-upload')?.click()}>
+                        <Button variant="outline" size="sm" onClick={() => faviconInputRef.current?.click()}>
                           <Upload className="h-4 w-4 mr-1" /> Upload Favicon
                         </Button>
                         <p className="text-xs text-muted-foreground">ICO, PNG, atau SVG. Maks 1MB.</p>

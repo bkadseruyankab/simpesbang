@@ -1430,7 +1430,7 @@ export function ServicePage() {
 
                             // Build KOP SURAT HTML
                             const kopLogoHtml = settings.app_logo
-                              ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:4px;object-fit:contain;" />`
+                              ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:0;object-fit:contain;" />`
                               : `<div class="kop-logo-inner">LOGO</div>`
                             const kopHtml = `<div class="kop-surat"><div class="kop-content"><div class="kop-logo">${kopLogoHtml}</div><div class="kop-text"><div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div><div class="kop-line2">${settings.app_kop_line2 || 'BADAN KEUANGAN DAN ASET DAERAH'}</div><div class="kop-line3">${settings.app_kop_line3 || 'UNIT LAYANAN PENGADAAN'}</div><div class="kop-address">${settings.app_address || 'Jl. Merdeka No. 1, Kota Selatan | Telp. (021) 123-4567 | Email: bkad@pemda.go.id'}</div></div></div><div class="kop-border"><div class="kop-border-inner"></div></div></div>`
 
@@ -1466,8 +1466,8 @@ export function ServicePage() {
   .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 0; position: relative; }
   .kop-surat { text-align: center; padding-bottom: 8px; position: relative; }
   .kop-content { display: flex; align-items: center; justify-content: center; gap: 14px; }
-  .kop-logo { width: 72px; height: 72px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .kop-logo-inner { width: 60px; height: 60px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
+  .kop-logo { width: 72px; height: 72px; border: none; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .kop-logo-inner { width: 60px; height: 60px; border: none; border-radius: 0; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
   .kop-text { text-align: center; }
   .kop-line1 { font-size: 11pt; font-weight: normal; letter-spacing: 1px; }
   .kop-line2 { font-size: 14pt; font-weight: bold; letter-spacing: 2px; margin: 1px 0; }

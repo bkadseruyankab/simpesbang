@@ -1172,46 +1172,93 @@ export function PengaturanPage() {
 
                 <Separator className="my-2" />
 
-                {/* Canvas Signature (alternative) */}
-                {localSettings.app_tte_image && (
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-muted-foreground">Atau Buat Tanda Tangan Manual (Canvas)</Label>
-                    {currentSignature ? (
-                      <div className="flex items-center gap-3">
+                {/* Canvas Signature (alternative / manual) */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <PenTool className="h-3.5 w-3.5" />
+                    Tanda Tangan Manual (Canvas)
+                  </Label>
+                  {currentSignature ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 p-3 rounded-xl border border-border/50 bg-muted/30">
                         <div className="shrink-0 rounded-lg border border-border/50 bg-white p-2">
                           <img
                             src={currentSignature.imageData}
                             alt="Tanda Tangan Canvas"
-                            className="h-8 w-auto max-w-[120px] object-contain"
+                            className="h-10 w-auto max-w-[160px] object-contain"
                           />
                         </div>
-                        <span className="text-xs text-muted-foreground">Tanda tangan canvas tersimpan (tidak digunakan saat TTE gambar aktif)</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (currentSignature?.id) {
-                              deleteSignature.mutate(currentSignature.id)
-                            }
-                          }}
-                          disabled={deleteSignature.isPending}
-                          className="gap-1 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-muted-foreground">
+                            {localSettings.app_tte_image
+                              ? 'Tanda tangan canvas tersimpan. Klik "Gunakan sebagai TTE" untuk mengganti gambar TTE saat ini.'
+                              : 'Tanda tangan canvas tersimpan. Klik "Gunakan sebagai TTE" untuk menggunakannya di semua dokumen cetak.'}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                toast.loading('Mengkonversi tanda tangan ke TTE...', { id: 'convert-tte' })
+                                const res = await fetch('/api/signature/convert-tte', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ signatureId: currentSignature.id }),
+                                })
+                                const data = await res.json()
+                                if (!res.ok) throw new Error(data.error || 'Gagal mengkonversi')
+                                setLocalSettings(s => ({ ...s, app_tte_image: data.ttePath + '?t=' + Date.now() }))
+                                setTteTimestamp(Date.now())
+                                queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
+                                toast.success('Tanda tangan berhasil dijadikan TTE', { id: 'convert-tte' })
+                              } catch (err: any) {
+                                toast.error(err.message || 'Gagal mengkonversi', { id: 'convert-tte' })
+                              }
+                            }}
+                            className="gap-1.5 rounded-xl border-teal-500/50 text-teal-600 hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-teal-950/30"
+                          >
+                            <Stamp className="h-3.5 w-3.5" /> Gunakan sebagai TTE
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (currentSignature?.id) {
+                                deleteSignature.mutate(currentSignature.id)
+                              }
+                            }}
+                            disabled={deleteSignature.isPending}
+                            className="gap-1 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
-                    ) : (
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setSignatureDialogOpen(true)}
                         className="gap-1.5 rounded-xl text-muted-foreground"
                       >
-                        <PenLine className="h-3.5 w-3.5" /> Buat Tanda Tangan Manual
+                        <PenLine className="h-3.5 w-3.5" /> Buat Ulang Tanda Tangan Manual
                       </Button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-6 rounded-xl border-2 border-dashed border-muted-foreground/25 bg-muted/20">
+                      <PenTool className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                      <p className="text-sm text-muted-foreground mb-1">Belum ada tanda tangan manual</p>
+                      <p className="text-xs text-muted-foreground/70 mb-3">Buat tanda tangan langsung di layar</p>
+                      <Button
+                        onClick={() => setSignatureDialogOpen(true)}
+                        className="gap-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-lg shadow-teal-500/20"
+                      >
+                        <PenLine className="h-4 w-4" /> Buat Tanda Tangan Manual
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -2462,8 +2509,10 @@ export function PengaturanPage() {
         onOpenChange={setSignatureDialogOpen}
         userId={authUser?.id || ''}
         userName={authUser?.name}
+        showTTEOption={true}
         onSaveSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['user-signature', authUser?.id] })
+          queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
         }}
       />
     </div>

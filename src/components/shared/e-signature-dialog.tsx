@@ -9,8 +9,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { SignaturePad } from '@/components/shared/signature-pad'
-import { PenLine, AlertCircle } from 'lucide-react'
+import { PenLine, AlertCircle, Stamp } from 'lucide-react'
 import { toast } from 'sonner'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 
 interface ESignatureDialogProps {
   open: boolean
@@ -18,6 +20,8 @@ interface ESignatureDialogProps {
   userId: string
   userName?: string
   onSaveSuccess?: () => void
+  /** Whether to show "Save as TTE" toggle (for pengaturan page) */
+  showTTEOption?: boolean
 }
 
 export function ESignatureDialog({
@@ -26,8 +30,10 @@ export function ESignatureDialog({
   userId,
   userName,
   onSaveSuccess,
+  showTTEOption = false,
 }: ESignatureDialogProps) {
   const [isSaving, setIsSaving] = useState(false)
+  const [saveAsTTE, setSaveAsTTE] = useState(true)
 
   const handleSave = useCallback(async (imageData: string) => {
     if (!userId) {
@@ -40,7 +46,11 @@ export function ESignatureDialog({
       const res = await fetch('/api/signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, imageData }),
+        body: JSON.stringify({
+          userId,
+          imageData,
+          saveAsTTE: showTTEOption && saveAsTTE,
+        }),
       })
 
       if (!res.ok) {
@@ -48,7 +58,14 @@ export function ESignatureDialog({
         throw new Error(err.error || 'Gagal menyimpan tanda tangan')
       }
 
-      toast.success('Tanda tangan berhasil disimpan')
+      const data = await res.json()
+
+      if (data.savedAsTTE) {
+        toast.success('Tanda tangan berhasil disimpan dan dijadikan TTE')
+      } else {
+        toast.success('Tanda tangan berhasil disimpan')
+      }
+
       onSaveSuccess?.()
       onOpenChange(false)
     } catch (error: any) {
@@ -56,7 +73,7 @@ export function ESignatureDialog({
     } finally {
       setIsSaving(false)
     }
-  }, [userId, onSaveSuccess, onOpenChange])
+  }, [userId, onSaveSuccess, onOpenChange, showTTEOption, saveAsTTE])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,6 +100,24 @@ export function ESignatureDialog({
               Hanya satu tanda tangan aktif yang dapat digunakan per pengguna.
             </p>
           </div>
+
+          {showTTEOption && (
+            <div className="flex items-center gap-3 rounded-xl border border-teal-200 bg-teal-50 p-3 dark:border-teal-800 dark:bg-teal-950/30">
+              <Stamp className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
+              <div className="flex-1">
+                <Label className="text-xs font-medium text-teal-800 dark:text-teal-300">
+                  Gunakan sebagai TTE (Tanda Tangan Elektronik)
+                </Label>
+                <p className="text-[10px] text-teal-600 dark:text-teal-400 mt-0.5">
+                  Tanda tangan akan otomatis ditampilkan di semua dokumen cetak resmi
+                </p>
+              </div>
+              <Switch
+                checked={saveAsTTE}
+                onCheckedChange={setSaveAsTTE}
+              />
+            </div>
+          )}
 
           <SignaturePad
             onSave={handleSave}

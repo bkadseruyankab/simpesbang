@@ -555,3 +555,32 @@ Work Log:
 Stage Summary:
 - TTE upload/delete API fully functional
 - Blob storage used for TTE images (same as logo/favicon)
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Remove circle from logo in prints + enhance TTE feature with manual signature via Pengaturan
+
+Work Log:
+- Removed border-radius from logo in ALL print documents (4 print templates):
+  - riwayat-page.tsx: Changed `.kop-logo` and `.kop-logo-inner` from `border-radius: 4px` to `border-radius: 0`, img inline style from `border-radius:4px` to `border-radius:0`
+  - service-page.tsx: Same changes to CSS classes and inline img style
+  - laporan-page.tsx: Same changes in BOTH print functions (handlePrintReport + handlePrintItemsReport)
+- Enhanced TTE feature:
+  - Added `/api/signature/convert-tte/route.ts` - converts existing canvas signature to TTE blob file
+  - Updated `/api/signature/route.ts` POST to accept `saveAsTTE` param - saves canvas signature as TTE blob simultaneously
+  - Updated `e-signature-dialog.tsx` with `showTTEOption` prop - shows "Gunakan sebagai TTE" toggle when drawing signature from pengaturan
+  - Updated `pengaturan-page.tsx` TTE section:
+    - Canvas signature section now always visible (not hidden behind TTE image existence)
+    - Added "Gunakan sebagai TTE" button for converting canvas signature to TTE blob
+    - Improved layout with larger preview, better descriptions
+    - ESignatureDialog now passes showTTEOption=true for auto-TTE on save
+    - Added pengaturan query invalidation on signature save success
+
+Stage Summary:
+- All print documents now display logo without any circular border (border-radius: 0)
+- Canvas-drawn signatures can be converted to TTE image with one click
+- E-Signature dialog has TTE toggle when accessed from pengaturan
+- TTE is consistently applied across all cetak documents
+- Files modified: riwayat-page.tsx, service-page.tsx, laporan-page.tsx, pengaturan-page.tsx, signature/route.ts, e-signature-dialog.tsx
+- Files created: signature/convert-tte/route.ts

@@ -180,8 +180,8 @@ export function RiwayatPage() {
   /* KOP SURAT */
   .kop-surat { text-align: center; padding-bottom: 8px; position: relative; }
   .kop-content { display: flex; align-items: center; justify-content: center; gap: 14px; }
-  .kop-logo { width: 72px; height: 72px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .kop-logo-inner { width: 60px; height: 60px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
+  .kop-logo { width: 72px; height: 72px; border: none; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .kop-logo-inner { width: 60px; height: 60px; border: none; border-radius: 0; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
   .kop-text { text-align: center; }
   .kop-line1 { font-size: 11pt; font-weight: normal; letter-spacing: 1px; }
   .kop-line2 { font-size: 14pt; font-weight: bold; letter-spacing: 2px; margin: 1px 0; }
@@ -278,7 +278,7 @@ export function RiwayatPage() {
   <div class="kop-surat">
     <div class="kop-content">
       <div class="kop-logo">
-        ${settings.app_logo ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:4px;object-fit:contain;" />` : `<div class="kop-logo-inner">LOGO</div>`}
+        ${settings.app_logo ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:0;object-fit:contain;" />` : `<div class="kop-logo-inner">LOGO</div>`}
       </div>
       <div class="kop-text">
         <div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div>

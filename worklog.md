@@ -49,3 +49,21 @@ Stage Summary:
 - Logo upload now displays correctly immediately after upload
 - Sidebar and favicon also update immediately after logo/favicon upload
 - Files modified: pengaturan-page.tsx, upload/route.ts, app-sidebar.tsx, dynamic-favicon.tsx, setup-wizard.tsx
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix React state update on unmounted component error
+
+Work Log:
+- Investigated the React error: "Can't perform a React state update on a component that hasn't mounted yet"
+- Found root cause: fetch() calls with setState in render body of pengaturan-page.tsx (compression + storage stats)
+- Found secondary issue: useMemo with side effects (setState) in kendaraan-page.tsx debounce pattern
+- Fixed pengaturan-page.tsx: moved fetch+setState from render body into proper useEffect hooks
+- Fixed kendaraan-page.tsx: replaced useMemo with useEffect for debounce search pattern
+- Changed import from useMemo to useEffect in kendaraan-page.tsx
+
+Stage Summary:
+- Fixed 2 render-time side effects that caused React warnings
+- Files modified: pengaturan-page.tsx, kendaraan-page.tsx
+- Lint check passes with 0 errors

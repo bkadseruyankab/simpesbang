@@ -425,7 +425,8 @@ export function PengaturanPage() {
   }, [settings])
 
   // Fetch compression settings
-  if (!compressLoaded) {
+  useEffect(() => {
+    if (compressLoaded) return
     fetch('/api/pengaturan/compress')
       .then(res => res.json())
       .then(data => {
@@ -443,10 +444,11 @@ export function PengaturanPage() {
         setCompressLoaded(true)
       })
       .catch(() => setCompressLoaded(true))
-  }
+  }, [compressLoaded])
 
   // Fetch storage stats
-  if (!storageLoaded) {
+  useEffect(() => {
+    if (storageLoaded) return
     fetch('/api/pengaturan/storage')
       .then(res => res.json())
       .then(data => {
@@ -454,7 +456,7 @@ export function PengaturanPage() {
         setStorageLoaded(true)
       })
       .catch(() => setStorageLoaded(true))
-  }
+  }, [storageLoaded])
 
   // Handle save compression settings
   const handleSaveCompressSettings = async () => {

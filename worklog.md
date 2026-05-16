@@ -755,3 +755,50 @@ Stage Summary:
 - Both WA and Email have test buttons in pengaturan page
 - Fonnte settings: fonnte_api_key, fonnte_admin_phone
 - SMTP settings: smtp_host, smtp_port, smtp_username, smtp_password, smtp_from_email
+---
+Task ID: 1
+Agent: Main Agent
+Task: Create image/file compression feature for uploads to save database storage
+
+Work Log:
+- Created `src/lib/compress.ts` - Shared compression utility library using `sharp`
+  - `CompressionSettings` interface with enabled, quality, maxWidth, maxHeight, format, and per-type toggles
+  - `getCompressionSettings()` - Reads compression config from SystemSetting DB
+  - `isCompressibleImage()` - Checks if MIME type is JPEG/PNG/WebP
+  - `shouldCompress()` - Determines if compression should apply based on settings and context
+  - `compressImage()` - Core compression using sharp with resize, format conversion, and quality control
+  - Returns both compressed buffer and metadata (original/compressed size, savings, dimensions)
+  - Graceful fallback: if compression fails, returns original buffer unchanged
+- Created `src/app/api/pengaturan/compress/route.ts` - Compression settings API
+  - GET: Returns current compression settings + stats (totalSaved, totalFiles)
+  - PUT: Saves compression settings to SystemSetting
+  - POST: Test compression on an uploaded image file
+- Integrated compression into all 5 upload routes:
+  - `/api/pengaturan/upload/route.ts` - Logo/favicon upload (context: 'logo')
+  - `/api/service/[id]/documents/route.ts` - Service documents (context: 'document')
+  - `/api/service/[id]/items/[itemId]/photos/route.ts` - Item photos (context: 'photo')
+  - `/api/bengkel/[id]/documents/route.ts` - Bengkel documents (context: 'document')
+  - `/api/kendaraan/[id]/documents/route.ts` - Vehicle documents (context: 'document')
+  - Each route: checks compression settings → compresses if applicable → updates file stats → tracks compression stats
+  - File extension updated when format changes (e.g., PNG→JPEG, *→WebP)
+  - PDF and SVG files are skipped (not compressible images)
+- Added "Kompresi" tab in Pengaturan page with:
+  - 3 stat cards: Total Hemat, File Dikompresi, Rata-rata Kompresi
+  - Compression settings card: enable/disable, quality slider, format selector, max dimensions, per-type toggles (Logo, Dokumen, Foto Item)
+  - Test compression card: upload image, test compression, see results with progress bar
+  - Added icons: Zap, FileDown, TrendingDown, BarChart3, CheckCircle, Camera
+- All APIs tested and working:
+  - GET /api/pengaturan/compress → returns settings + stats
+  - PUT /api/pengaturan/compress → saves settings (confirmed quality change from 75→80)
+  - POST /api/pengaturan/compress → test compression (84% savings on test image: 35.5KB→5.5KB)
+- Lint passes with 0 errors (3 pre-existing warnings only)
+
+Stage Summary:
+- Image compression feature fully implemented across all upload routes
+- Uses `sharp` (already installed) for server-side image processing
+- Configurable: quality (10-100%), format (original/JPEG/WebP), max dimensions, per-upload-type toggles
+- Compression stats tracked in SystemSetting DB (total bytes saved, file count)
+- Test compression UI shows before/after comparison with progress bar
+- 84% compression achieved on test image (35.5KB → 5.5KB, 3000x2000 → 1620x1080)
+- PDF files are not compressed (only images: JPEG, PNG, WebP)
+- SVG files skipped (vector format, not applicable for raster compression)

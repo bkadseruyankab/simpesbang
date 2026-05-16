@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
+import { getCompressionSettings, shouldCompress, compressImage } from '@/lib/compress'
 
 type RouteContext = { params: Promise<{ id: string; itemId: string }> }
 
@@ -58,15 +59,57 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'item-photos')
     await mkdir(uploadDir, { recursive: true })
 
+    // Get compression settings
+    const compressionSettings = await getCompressionSettings()
+
     const photos = []
     for (const file of files) {
       const timestamp = Date.now()
       const randomSuffix = Math.random().toString(36).substring(2, 8)
       const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const uniqueName = `${timestamp}-${randomSuffix}-${sanitizedName}`
-      const filePath = path.join(uploadDir, uniqueName)
 
-      const buffer = Buffer.from(await file.arrayBuffer())
+      // Get file buffer
+      let buffer = Buffer.from(await file.arrayBuffer())
+      let finalMimeType = file.type
+      let finalFileSize = file.size
+
+      // Apply compression for photos (always image)
+      if (shouldCompress(compressionSettings, file.type, 'photo')) {
+        const result = await compressImage(buffer, file.type, compressionSettings)
+        buffer = result.buffer
+        finalMimeType = result.metadata.format || file.type
+        finalFileSize = buffer.length
+
+        // Update compression stats
+        if (result.metadata.wasCompressed) {
+          try {
+            await db.systemSetting.upsert({
+              where: { key: 'compress_total_saved' },
+              update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_saved' } }))?.value || '0') + result.metadata.savedBytes).toString() },
+              create: { key: 'compress_total_saved', value: result.metadata.savedBytes.toString() },
+            })
+            await db.systemSetting.upsert({
+              where: { key: 'compress_total_files' },
+              update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_files' } }))?.value || '0') + 1).toString() },
+              create: { key: 'compress_total_files', value: '1' },
+            })
+          } catch {
+            // Ignore stats update errors
+          }
+        }
+      }
+
+      // Build filename with correct extension
+      let uniqueName = `${timestamp}-${randomSuffix}-${sanitizedName}`
+      if (finalMimeType === 'image/webp' && !sanitizedName.endsWith('.webp')) {
+        const baseName = sanitizedName.replace(/\.[^.]+$/, '')
+        uniqueName = `${timestamp}-${randomSuffix}-${baseName}.webp`
+      } else if (finalMimeType === 'image/jpeg' && !sanitizedName.match(/\.(jpg|jpeg)$/)) {
+        const baseName = sanitizedName.replace(/\.[^.]+$/, '')
+        uniqueName = `${timestamp}-${randomSuffix}-${baseName}.jpg`
+      }
+
+      const filePath = path.join(uploadDir, uniqueName)
       await writeFile(filePath, buffer)
 
       const photo = await db.serviceItemPhoto.create({
@@ -74,8 +117,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
           itemId,
           fileName: file.name,
           filePath: `/uploads/item-photos/${uniqueName}`,
-          fileSize: file.size,
-          fileType: file.type,
+          fileSize: finalFileSize,
+          fileType: finalMimeType,
           keterangan,
         },
       })

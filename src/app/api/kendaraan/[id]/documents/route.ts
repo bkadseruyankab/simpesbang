@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
+import { getCompressionSettings, shouldCompress, compressImage } from '@/lib/compress'
 
 export async function GET(
   request: NextRequest,
@@ -61,15 +62,56 @@ export async function POST(
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'documents')
     await mkdir(uploadsDir, { recursive: true })
 
+    // Get file buffer
+    const bytes = await file.arrayBuffer()
+    let buffer = Buffer.from(bytes)
+    let finalMimeType = file.type
+    let finalFileSize = file.size
+
+    // Apply compression for images
+    const compressionSettings = await getCompressionSettings()
+    if (shouldCompress(compressionSettings, file.type, 'document')) {
+      const result = await compressImage(buffer, file.type, compressionSettings)
+      buffer = result.buffer
+      finalMimeType = result.metadata.format || file.type
+      finalFileSize = buffer.length
+
+      // Update compression stats
+      if (result.metadata.wasCompressed) {
+        try {
+          await db.systemSetting.upsert({
+            where: { key: 'compress_total_saved' },
+            update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_saved' } }))?.value || '0') + result.metadata.savedBytes).toString() },
+            create: { key: 'compress_total_saved', value: result.metadata.savedBytes.toString() },
+          })
+          await db.systemSetting.upsert({
+            where: { key: 'compress_total_files' },
+            update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_files' } }))?.value || '0') + 1).toString() },
+            create: { key: 'compress_total_files', value: '1' },
+          })
+        } catch {
+          // Ignore stats update errors
+        }
+      }
+    }
+
     // Generate unique filename
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const fileName = `${timestamp}_${sanitizedName}`
+    let fileName = `${timestamp}_${sanitizedName}`
+
+    // If format changed due to compression, update the extension
+    if (finalMimeType === 'image/webp' && !sanitizedName.endsWith('.webp')) {
+      const baseName = sanitizedName.replace(/\.[^.]+$/, '')
+      fileName = `${timestamp}_${baseName}.webp`
+    } else if (finalMimeType === 'image/jpeg' && !sanitizedName.match(/\.(jpg|jpeg)$/)) {
+      const baseName = sanitizedName.replace(/\.[^.]+$/, '')
+      fileName = `${timestamp}_${baseName}.jpg`
+    }
+
     const filePath = path.join(uploadsDir, fileName)
 
     // Write file
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
     await writeFile(filePath, buffer)
 
     // Save document record
@@ -79,7 +121,7 @@ export async function POST(
         jenisDokumen,
         fileName: file.name,
         filePath: `/uploads/documents/${fileName}`,
-        fileSize: file.size,
+        fileSize: finalFileSize,
       },
     })
 

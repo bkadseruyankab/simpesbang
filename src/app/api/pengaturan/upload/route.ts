@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { writeFile, unlink } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
+import { getCompressionSettings, shouldCompress, compressImage } from '@/lib/compress'
 
 const LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml']
 const LOGO_MAX_SIZE = 2 * 1024 * 1024 // 2MB
@@ -59,10 +60,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Build unique filename
+    // Get file buffer
+    const bytes = await file.arrayBuffer()
+    let buffer = Buffer.from(bytes)
+    let finalMimeType = file.type
+
+    // Apply compression for images (skip SVG)
+    const compressionSettings = await getCompressionSettings()
+    if (shouldCompress(compressionSettings, file.type, 'logo') && file.type !== 'image/svg+xml') {
+      const result = await compressImage(buffer, file.type, compressionSettings)
+      buffer = result.buffer
+      finalMimeType = result.metadata.format || file.type
+
+      // Update compression stats
+      if (result.metadata.wasCompressed) {
+        try {
+          await db.systemSetting.upsert({
+            where: { key: 'compress_total_saved' },
+            update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_saved' } }))?.value || '0') + result.metadata.savedBytes).toString() },
+            create: { key: 'compress_total_saved', value: result.metadata.savedBytes.toString() },
+          })
+          await db.systemSetting.upsert({
+            where: { key: 'compress_total_files' },
+            update: { value: (parseInt((await db.systemSetting.findUnique({ where: { key: 'compress_total_files' } }))?.value || '0') + 1).toString() },
+            create: { key: 'compress_total_files', value: '1' },
+          })
+        } catch {
+          // Ignore stats update errors
+        }
+      }
+    }
+
+    // Build unique filename - adjust extension based on output format
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const uniqueFilename = `${type}-${timestamp}-${sanitizedName}`
+    let uniqueFilename = `${type}-${timestamp}-${sanitizedName}`
+
+    // If format changed due to compression, update the extension
+    if (finalMimeType === 'image/webp' && !sanitizedName.endsWith('.webp')) {
+      const baseName = sanitizedName.replace(/\.[^.]+$/, '')
+      uniqueFilename = `${type}-${timestamp}-${baseName}.webp`
+    } else if (finalMimeType === 'image/jpeg' && !sanitizedName.match(/\.(jpg|jpeg)$/)) {
+      const baseName = sanitizedName.replace(/\.[^.]+$/, '')
+      uniqueFilename = `${type}-${timestamp}-${baseName}.jpg`
+    }
 
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'settings')
     const fullFilePath = path.join(uploadsDir, uniqueFilename)
@@ -85,9 +126,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Write the new file
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
+    // Write the (possibly compressed) file
     await writeFile(fullFilePath, buffer)
 
     // Upsert the setting in the database

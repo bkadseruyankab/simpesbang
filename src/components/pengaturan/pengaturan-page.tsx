@@ -41,7 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare } from 'lucide-react'
+import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare, Zap, FileDown, TrendingDown, BarChart3, CheckCircle, Camera } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -300,6 +300,17 @@ export function PengaturanPage() {
   const [testingWA, setTestingWA] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
 
+  // Compression states
+  const [testingCompress, setTestingCompress] = useState(false)
+  const [compressTestFile, setCompressTestFile] = useState<File | null>(null)
+  const [compressResult, setCompressResult] = useState<any>(null)
+  const [compressSettings, setCompressSettings] = useState({
+    enabled: true, quality: 80, maxWidth: 1920, maxHeight: 1080,
+    format: 'original' as string, compressPhotos: true, compressDocuments: true, compressLogo: true,
+  })
+  const [compressLoaded, setCompressLoaded] = useState(false)
+  const [compressStats, setCompressStats] = useState({ totalSaved: 0, totalFiles: 0 })
+
   const handleTestWhatsApp = async () => {
     if (!localSettings.fonnte_api_key) {
       toast.error('API Key Fonnte belum diisi')
@@ -363,6 +374,67 @@ export function PengaturanPage() {
     setSettingsLoaded(true)
   }
 
+  // Fetch compression settings
+  if (!compressLoaded) {
+    fetch('/api/pengaturan/compress')
+      .then(res => res.json())
+      .then(data => {
+        setCompressSettings({
+          enabled: data.enabled !== false,
+          quality: data.quality || 80,
+          maxWidth: data.maxWidth || 1920,
+          maxHeight: data.maxHeight || 1080,
+          format: data.format || 'original',
+          compressPhotos: data.compressPhotos !== false,
+          compressDocuments: data.compressDocuments !== false,
+          compressLogo: data.compressLogo !== false,
+        })
+        setCompressStats({ totalSaved: data.totalSaved || 0, totalFiles: data.totalFiles || 0 })
+        setCompressLoaded(true)
+      })
+      .catch(() => setCompressLoaded(true))
+  }
+
+  // Handle save compression settings
+  const handleSaveCompressSettings = async () => {
+    try {
+      toast.loading('Menyimpan pengaturan kompresi...', { id: 'compress-save' })
+      const res = await fetch('/api/pengaturan/compress', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(compressSettings),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan')
+      toast.success('Pengaturan kompresi berhasil disimpan', { id: 'compress-save' })
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal menyimpan pengaturan kompresi', { id: 'compress-save' })
+    }
+  }
+
+  // Handle test compression
+  const handleTestCompression = async () => {
+    if (!compressTestFile) {
+      toast.error('Pilih file gambar terlebih dahulu')
+      return
+    }
+    try {
+      setTestingCompress(true)
+      setCompressResult(null)
+      const formData = new FormData()
+      formData.append('file', compressTestFile)
+      const res = await fetch('/api/pengaturan/compress', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Gagal menguji kompresi')
+      setCompressResult(data)
+      toast.success(`Kompresi berhasil! Hemat ${data.savedPercent}% (${formatBytes(data.savedBytes)})`)
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal menguji kompresi')
+    } finally {
+      setTestingCompress(false)
+    }
+  }
+
   const handleSaveSettings = (section: string) => {
     const sectionKeys: Record<string, string[]> = {
       umum: ['nama_instansi', 'tahun_aktif', 'nomor_surat_otomatis', 'format_nomor_surat', 'bengkel_can_create_service'],
@@ -401,6 +473,14 @@ export function PengaturanPage() {
   const formatDate = (date: string) =>
     new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+  }
+
   if (loadingSettings) {
     return (
       <div className="space-y-4">
@@ -431,6 +511,7 @@ export function PengaturanPage() {
           <TabsTrigger value="email" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Email & Notifikasi</TabsTrigger>
           <TabsTrigger value="users" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Manajemen User</TabsTrigger>
           <TabsTrigger value="audit" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Audit Log</TabsTrigger>
+          <TabsTrigger value="compress" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200"><Zap className="h-3.5 w-3.5 mr-1" /> Kompresi</TabsTrigger>
           <TabsTrigger value="backup" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Backup & Restore</TabsTrigger>
           <TabsTrigger value="tahun" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Pergantian Tahun</TabsTrigger>
         </TabsList>
@@ -1205,6 +1286,283 @@ export function PengaturanPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Tab: Kompresi Gambar */}
+        <TabsContent value="compress" className="mt-4">
+          <div className="space-y-6">
+            {/* Stats Card */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Card className="animate-fade-in animate-stagger-1 border border-border/50 shadow-sm rounded-2xl card-hover">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white shrink-0">
+                      <TrendingDown className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground tracking-wider uppercase">Total Hemat</p>
+                      <p className="text-xl font-bold">{formatBytes(compressStats.totalSaved)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shrink-0">
+                      <FileDown className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground tracking-wider uppercase">File Dikompresi</p>
+                      <p className="text-xl font-bold">{compressStats.totalFiles}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="animate-fade-in animate-stagger-3 border border-border/50 shadow-sm rounded-2xl card-hover">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white shrink-0">
+                      <BarChart3 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground tracking-wider uppercase">Rata-rata Kompresi</p>
+                      <p className="text-xl font-bold">{compressStats.totalFiles > 0 ? Math.round(compressStats.totalSaved / compressStats.totalFiles / 1024) + ' KB' : '0 KB'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Settings Card */}
+            <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-amber-500" />
+                  Pengaturan Kompresi
+                </CardTitle>
+                <CardDescription>Konfigurasi kompresi gambar otomatis saat upload untuk menghemat penyimpanan</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-amber-500" />
+                      Aktifkan Kompresi Otomatis
+                    </Label>
+                    <p className="text-xs text-muted-foreground">Kompresi gambar secara otomatis saat upload</p>
+                  </div>
+                  <Switch
+                    checked={compressSettings.enabled}
+                    onCheckedChange={(checked) => setCompressSettings(s => ({ ...s, enabled: checked }))}
+                  />
+                </div>
+
+                <Separator />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="compress-quality">Kualitas Gambar ({compressSettings.quality}%)</Label>
+                    <input
+                      id="compress-quality"
+                      type="range"
+                      min={10}
+                      max={100}
+                      step={5}
+                      value={compressSettings.quality}
+                      onChange={(e) => setCompressSettings(s => ({ ...s, quality: parseInt(e.target.value) }))}
+                      className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-teal-600"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Kecil (10%)</span>
+                      <span>Besar (100%)</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Format Output</Label>
+                    <Select value={compressSettings.format} onValueChange={(v) => setCompressSettings(s => ({ ...s, format: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="original">Asli (JPEG→JPEG, PNG→JPEG)</SelectItem>
+                        <SelectItem value="jpeg">Selalu JPEG</SelectItem>
+                        <SelectItem value="webp">Selalu WebP (terkecil)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">WebP menghasilkan ukuran file terkecil</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="compress-max-width">Lebar Maksimum (px)</Label>
+                    <Input
+                      id="compress-max-width"
+                      type="number"
+                      value={compressSettings.maxWidth}
+                      onChange={(e) => setCompressSettings(s => ({ ...s, maxWidth: parseInt(e.target.value) || 1920 }))}
+                      min={320}
+                      max={7680}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="compress-max-height">Tinggi Maksimum (px)</Label>
+                    <Input
+                      id="compress-max-height"
+                      type="number"
+                      value={compressSettings.maxHeight}
+                      onChange={(e) => setCompressSettings(s => ({ ...s, maxHeight: parseInt(e.target.value) || 1080 }))}
+                      min={240}
+                      max={4320}
+                    />
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Kompresi per Jenis Upload</Label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon className="h-4 w-4 text-teal-500" />
+                        <div>
+                          <p className="text-sm font-medium">Logo Aplikasi</p>
+                          <p className="text-xs text-muted-foreground">Kompresi logo & favicon</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={compressSettings.compressLogo}
+                        onCheckedChange={(checked) => setCompressSettings(s => ({ ...s, compressLogo: checked }))}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-amber-500" />
+                        <div>
+                          <p className="text-sm font-medium">Dokumen</p>
+                          <p className="text-xs text-muted-foreground">Nota, kwitansi, dokumen bengkel & kendaraan</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={compressSettings.compressDocuments}
+                        onCheckedChange={(checked) => setCompressSettings(s => ({ ...s, compressDocuments: checked }))}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
+                      <div className="flex items-center gap-2">
+                        <Camera className="h-4 w-4 text-blue-500" />
+                        <div>
+                          <p className="text-sm font-medium">Foto Item Service</p>
+                          <p className="text-xs text-muted-foreground">Foto perbaikan/service item</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={compressSettings.compressPhotos}
+                        onCheckedChange={(checked) => setCompressSettings(s => ({ ...s, compressPhotos: checked }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSaveCompressSettings} className="rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-lg shadow-teal-500/20">
+                    <Save className="h-4 w-4 mr-1" /> Simpan Pengaturan
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Test Compression Card */}
+            <Card className="animate-fade-in animate-stagger-3 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-emerald-500" />
+                  Uji Kompresi
+                </CardTitle>
+                <CardDescription>Upload gambar untuk menguji pengaturan kompresi saat ini</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+                  <div className="flex-1 space-y-2">
+                    <Label>Pilih Gambar untuk Test</Label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        id="compress-test-file"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            setCompressTestFile(file)
+                            setCompressResult(null)
+                          }
+                          e.target.value = ''
+                        }}
+                      />
+                      <Button variant="outline" size="sm" onClick={() => document.getElementById('compress-test-file')?.click()}>
+                        <Upload className="h-4 w-4 mr-1" /> Pilih File
+                      </Button>
+                      {compressTestFile && (
+                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">{compressTestFile.name}</span>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleTestCompression}
+                    disabled={!compressTestFile || testingCompress}
+                    className="rounded-xl"
+                  >
+                    {testingCompress ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5" />
+                    ) : (
+                      <Zap className="h-4 w-4 mr-1.5" />
+                    )}
+                    Uji Kompresi
+                  </Button>
+                </div>
+
+                {/* Compression Result */}
+                {compressResult && (
+                  <div className="rounded-xl border border-border/50 bg-muted/30 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      {compressResult.wasCompressed ? (
+                        <CheckCircle className="h-5 w-5 text-emerald-500" />
+                      ) : (
+                        <span className="text-amber-500 text-sm">ℹ️</span>
+                      )}
+                      <span className="text-sm font-medium">
+                        {compressResult.wasCompressed ? 'Kompresi Berhasil!' : 'File tidak perlu dikompresi'}
+                      </span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-lg border border-border/50 p-3 bg-background">
+                        <p className="text-xs text-muted-foreground">Ukuran Asli</p>
+                        <p className="text-lg font-bold">{formatBytes(compressResult.originalSize)}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/50 p-3 bg-background">
+                        <p className="text-xs text-muted-foreground">Setelah Kompresi</p>
+                        <p className="text-lg font-bold text-emerald-600">{formatBytes(compressResult.compressedSize)}</p>
+                      </div>
+                    </div>
+                    {compressResult.wasCompressed && (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full transition-all duration-500"
+                            style={{ width: `${100 - compressResult.savedPercent}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-bold text-emerald-600">-{compressResult.savedPercent}%</span>
+                      </div>
+                    )}
+                    {compressResult.width && compressResult.height && (
+                      <p className="text-xs text-muted-foreground">
+                        Dimensi: {compressResult.width} × {compressResult.height}px | Format: {compressResult.format}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Tab: Backup & Restore */}

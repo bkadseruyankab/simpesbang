@@ -584,3 +584,28 @@ Stage Summary:
 - TTE is consistently applied across all cetak documents
 - Files modified: riwayat-page.tsx, service-page.tsx, laporan-page.tsx, pengaturan-page.tsx, signature/route.ts, e-signature-dialog.tsx
 - Files created: signature/convert-tte/route.ts
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Fix logo reverting to default on refresh, add Tempat Penandatanganan setting, reposition Jabatan Kepala in all prints
+
+Work Log:
+1. **Fix logo persistence**: Removed `app_logo`, `app_favicon`, `app_tte_image` from `handleSaveSettings('identitas')` section keys to prevent accidental overwrite of blob URLs when saving other identitas settings. These are managed by the upload API which already persists to SystemSetting via `storeBlobFile`.
+2. **Add app_tempat_ttd setting**: Added `app_tempat_ttd: 'Kabupaten/Kota'` default to `/api/pengaturan/route.ts` GET defaults. Added `app_tempat_ttd` to `handleSaveSettings('identitas')` section keys. Added input field in the Tanda Tangan card of pengaturan-page.tsx with label "Tempat Penandatanganan" and helper text.
+3. **Reposition Jabatan Kepala**: Changed signature block order in ALL print documents from: Tempat+Date → Signature → Nama → Jabatan → NIP to: Tempat+Date → Jabatan → Signature → Nama → NIP. The Jabatan now appears right below the tempat/tanggal line.
+4. **Dynamic Tempat Penandatanganan**: Replaced hardcoded "Kabupaten/Kota" with `${settings.app_tempat_ttd || 'Kabupaten/Kota'}` in all print signature sections.
+
+Files modified:
+- `/src/app/api/pengaturan/route.ts` - Added `app_tempat_ttd` default
+- `/src/components/pengaturan/pengaturan-page.tsx` - Removed blob keys from save, added tempat_ttd input
+- `/src/components/riwayat/riwayat-page.tsx` - Repositioned jabatan, used app_tempat_ttd
+- `/src/components/service/service-page.tsx` - Repositioned jabatan, used app_tempat_ttd  
+- `/src/components/laporan/laporan-page.tsx` - Repositioned jabatan, used app_tempat_ttd (both print functions + preview)
+
+Stage Summary:
+- Logo no longer reverts to default on refresh (blob URL keys removed from settings save)
+- New "Tempat Penandatanganan" setting allows customizing the signing place text
+- Jabatan Kepala position moved below Tempat Penandatanganan in all cetak documents
+- All 4 print templates updated with dynamic tempat_ttd
+- Lint: 0 errors, 2 pre-existing warnings

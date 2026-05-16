@@ -33,6 +33,7 @@ export async function GET() {
       app_kepala_nama: '',
       app_kepala_nip: '',
       app_kepala_jabatan: 'Kepala BKAD',
+      app_tempat_ttd: 'Kabupaten/Kota',
       app_sekda_nama: '',
       app_sekda_nip: '',
       app_tte_image: '',

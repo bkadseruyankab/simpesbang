@@ -540,7 +540,7 @@ export function PengaturanPage() {
       umum: ['nama_instansi', 'tahun_aktif', 'nomor_surat_otomatis', 'format_nomor_surat', 'bengkel_can_create_service'],
       email: ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from_email', 'fonnte_api_key', 'fonnte_admin_phone',
         'notif_service_diajukan', 'notif_service_disetujui', 'notif_service_ditolak', 'notif_service_selesai', 'notif_anggaran_warning'],
-      identitas: ['app_name', 'app_short_name', 'app_description', 'app_instansi', 'app_address', 'app_phone', 'app_email', 'app_logo', 'app_favicon', 'app_tte_image', 'app_kop_line1', 'app_kop_line2', 'app_kop_line3', 'app_kepala_nama', 'app_kepala_nip', 'app_kepala_jabatan', 'app_sekda_nama', 'app_sekda_nip'],
+      identitas: ['app_name', 'app_short_name', 'app_description', 'app_instansi', 'app_address', 'app_phone', 'app_email', 'app_kop_line1', 'app_kop_line2', 'app_kop_line3', 'app_kepala_nama', 'app_kepala_nip', 'app_kepala_jabatan', 'app_tempat_ttd', 'app_sekda_nama', 'app_sekda_nip'],
     }
     const keys = sectionKeys[section] || []
     const updateData: Record<string, string> = {}
@@ -1054,6 +1054,16 @@ export function PengaturanPage() {
                       onChange={(e) => setLocalSettings(s => ({ ...s, app_kepala_jabatan: e.target.value }))}
                       placeholder="Kepala BKAD"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_tempat_ttd">Tempat Penandatanganan</Label>
+                    <Input
+                      id="app_tempat_ttd"
+                      value={localSettings.app_tempat_ttd || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_tempat_ttd: e.target.value }))}
+                      placeholder="Kabupaten/Kota"
+                    />
+                    <p className="text-xs text-muted-foreground">Tempat penandatanganan yang tampil pada dokumen cetak (contoh: Kabupaten Bandung, Kota Surabaya)</p>
                   </div>
 
                 </div>

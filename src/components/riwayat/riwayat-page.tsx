@@ -406,14 +406,14 @@ export function RiwayatPage() {
       <div class="sig-qr-label">Scan untuk verifikasi</div>
     </div>
     <div class="sig-block">
-      <div class="sig-date">Kabupaten/Kota, ${printDate}</div>
+      <div class="sig-date">${settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div>
+      <div class="sig-title" style="margin-bottom:4px;">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
       ${settings.app_tte_image 
         ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>`
         : kepalaSignature 
           ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>`
           : `<div style="height:60px;"></div>`}
       <div class="sig-name">${settings.app_kepala_nama || '________________________'}</div>
-      <div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
       ${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}
     </div>
   </div>

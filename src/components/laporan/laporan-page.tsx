@@ -38,6 +38,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { generateQRDataURL } from '@/lib/qrcode-helper'
 
 const STATUS_COLORS: Record<string, string> = {
   DIAJUKAN: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
@@ -137,6 +138,7 @@ export function LaporanPage() {
 
   // Fetch Kepala BKAD signature for print documents
   const [kepalaSignature, setKepalaSignature] = useState<string | null>(null)
+  const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const kepalaSigFetched = useRef(false)
   useEffect(() => {
     if (kepalaSigFetched.current) return
@@ -161,6 +163,11 @@ export function LaporanPage() {
         }
       })
       .catch(() => {})
+  }, [])
+
+  // Generate QR code data URL for print documents
+  useEffect(() => {
+    generateQRDataURL(window.location.origin, 150).then(setQrDataUrl).catch(() => {})
   }, [])
 
   // Extract unique SKPD/Bidang from vehicles
@@ -438,6 +445,7 @@ export function LaporanPage() {
   .sig-block { text-align: center; width: 220px; }
   .sig-date { font-size: 9pt; margin-bottom: 4px; }
   .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
+  .sig-jabatan { font-size: 8.5pt; font-weight: bold; }
   .sig-title { font-size: 8.5pt; font-weight: bold; }
   .sig-nip { font-size: 8pt; color: #555; }
   .sig-tte-label { font-size: 7.5pt; color: #888; font-style: italic; }
@@ -471,7 +479,7 @@ export function LaporanPage() {
   <div class="kop-surat">
     <div class="kop-content">
       <div class="kop-logo">
-        ${settings.app_logo ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:0;object-fit:contain;" />` : `<div class="kop-logo-inner">LOGO</div>`}
+        ${(settings.app_print_logo || settings.app_logo) ? `<img src="${window.location.origin}${settings.app_print_logo || settings.app_logo}" style="width:60px;height:60px;border-radius:0;object-fit:contain;" />` : `<div class="kop-logo-inner">LOGO</div>`}
       </div>
       <div class="kop-text">
         <div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div>
@@ -646,18 +654,18 @@ export function LaporanPage() {
   <!-- SIGNATURE -->
   <div class="signature-section">
     <div class="sig-qr">
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin)}" alt="QR Code Verifikasi" />
+      ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR Code Verifikasi" style="width:120px;height:120px;" />` : `<div style="width:120px;height:120px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8pt;color:#888;">QR Code</div>`}
       <div class="sig-qr-label">Scan untuk verifikasi dokumen</div>
     </div>
     <div class="sig-block">
-      <div class="sig-date">${settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div>
-      <div class="sig-title" style="margin-bottom:4px;">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
+      <div class="sig-date">${settings.app_kabupaten_kota || settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div>
       ${settings.app_tte_image 
         ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>`
         : kepalaSignature 
           ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>`
           : `<div style="height:60px;"></div>`}
       <div class="sig-name">${settings.app_kepala_nama || '________________________'}</div>
+      <div class="sig-jabatan">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
       ${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}
     </div>
   </div>
@@ -685,7 +693,7 @@ export function LaporanPage() {
     }
     toast.success('Laporan resmi berhasil dicetak')
     setPrintDialogOpen(false)
-  }, [data, filteredServices, getDocNumber, getReportTitle, getPeriodLabel, formatRupiah, printSections, settings, kepalaSignature])
+  }, [data, filteredServices, getDocNumber, getReportTitle, getPeriodLabel, formatRupiah, printSections, settings, kepalaSignature, qrDataUrl])
 
   const handleDownloadPDF = useCallback(() => {
     // Use the same HTML for PDF download
@@ -708,8 +716,8 @@ export function LaporanPage() {
     }, 0)
 
     // Build KOP SURAT HTML
-    const kopLogoHtml = settings.app_logo
-      ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:0;object-fit:contain;" />`
+    const kopLogoHtml = (settings.app_print_logo || settings.app_logo)
+      ? `<img src="${window.location.origin}${settings.app_print_logo || settings.app_logo}" style="width:60px;height:60px;border-radius:0;object-fit:contain;" />`
       : `<div class="kop-logo-inner">LOGO</div>`
     const kopHtml = `<div class="kop-surat"><div class="kop-content"><div class="kop-logo">${kopLogoHtml}</div><div class="kop-text"><div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div><div class="kop-line2">${settings.app_kop_line2 || 'BADAN KEUANGAN DAN ASET DAERAH'}</div><div class="kop-line3">${settings.app_kop_line3 || 'UNIT LAYANAN PENGADAAN'}</div><div class="kop-address">${settings.app_address || 'Jl. Merdeka No. 1, Kota Selatan | Telp. (021) 123-4567 | Email: bkad@pemda.go.id'}</div></div></div><div class="kop-border"><div class="kop-border-inner"></div></div></div>`
 
@@ -727,7 +735,7 @@ export function LaporanPage() {
 
     // Build signature HTML
     const sigHtml = printItemsSignature
-      ? `<div class="signature-section"><div class="sig-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin)}" alt="QR Code Verifikasi" style="width:120px;height:120px;border:1px solid #ccc;border-radius:4px;" /><div style="font-size:7.5pt;color:#555;margin-top:4px;line-height:1.3;">Scan untuk verifikasi dokumen</div></div><div class="sig-block"><div class="sig-date">${settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div><div class="sig-title" style="margin-bottom:4px;">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>${settings.app_tte_image ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>` : kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div>${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}</div></div>`
+      ? `<div class="signature-section"><div class="sig-qr">${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR Code Verifikasi" style="width:120px;height:120px;" />` : `<div style="width:120px;height:120px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8pt;color:#888;">QR Code</div>`}<div style="font-size:7.5pt;color:#555;margin-top:4px;line-height:1.3;">Scan untuk verifikasi dokumen</div></div><div class="sig-block"><div class="sig-date">${settings.app_kabupaten_kota || settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div>${settings.app_tte_image ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>` : kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-jabatan">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}</div></div>`
       : ''
 
     const html = `<!DOCTYPE html>
@@ -772,6 +780,7 @@ export function LaporanPage() {
   .sig-block { text-align: center; width: 220px; }
   .sig-date { font-size: 9pt; margin-bottom: 4px; }
   .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
+  .sig-jabatan { font-size: 8.5pt; font-weight: bold; }
   .sig-title { font-size: 8.5pt; font-weight: bold; }
   .sig-nip { font-size: 8pt; color: #555; }
   .sig-tte-label { font-size: 7.5pt; color: #888; font-style: italic; }
@@ -809,7 +818,7 @@ export function LaporanPage() {
     }
     toast.success('Laporan item perbaikan berhasil dicetak')
     setPrintItemsDialogOpen(false)
-  }, [filteredServices, getDocNumber, getPeriodLabel, formatRupiah, printItemsSignature, settings, kepalaSignature])
+  }, [filteredServices, getDocNumber, getPeriodLabel, formatRupiah, printItemsSignature, settings, kepalaSignature, qrDataUrl])
 
   if (isLoading) {
     return (
@@ -1839,10 +1848,10 @@ export function LaporanPage() {
                     <div style={{ width: '50px', height: '50px', border: '1px solid #ccc', borderRadius: '2px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '5pt', color: '#888' }}>QR</div>
                   </div>
                   <div style={{ textAlign: 'center', width: '160px' }}>
-                    <div>{settings.app_tempat_ttd || 'Kabupaten/Kota'}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
-                    <div style={{ fontWeight: 'bold', fontSize: '6pt' }}>{settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
+                    <div>{settings.app_kabupaten_kota || settings.app_tempat_ttd || 'Kabupaten/Kota'}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
                     <div style={{ height: '30px' }}></div>
                     <div style={{ fontWeight: 'bold', borderBottom: '1px solid #1a1a1a', display: 'inline-block', minWidth: '120px' }}>{settings.app_kepala_nama || '\u00A0'}</div>
+                    <div style={{ fontWeight: 'bold', fontSize: '6pt' }}>{settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
                     <div style={{ color: '#555', fontSize: '6pt' }}>{settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________'}</div>
                   </div>
                 </div>

@@ -41,7 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare, Zap, FileDown, TrendingDown, BarChart3, CheckCircle, Camera, HardDrive, FileArchive, Paperclip, ImagePlus, PenTool } from 'lucide-react'
+import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare, Zap, FileDown, TrendingDown, BarChart3, CheckCircle, Camera, HardDrive, FileArchive, Paperclip, ImagePlus, PenTool, Printer, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
@@ -74,11 +74,13 @@ export function PengaturanPage() {
   const logoInputRef = useRef<HTMLInputElement>(null)
   const faviconInputRef = useRef<HTMLInputElement>(null)
   const tteInputRef = useRef<HTMLInputElement>(null)
+  const printLogoInputRef = useRef<HTMLInputElement>(null)
 
-  // Cache-busting timestamp for logo/favicon/tte
+  // Cache-busting timestamp for logo/favicon/tte/print-logo
   const [logoTimestamp, setLogoTimestamp] = useState(Date.now())
   const [faviconTimestamp, setFaviconTimestamp] = useState(Date.now())
   const [tteTimestamp, setTteTimestamp] = useState(Date.now())
+  const [printLogoTimestamp, setPrintLogoTimestamp] = useState(Date.now())
 
   // Fetch settings
   const { data: settings = {}, isLoading: loadingSettings } = useQuery({
@@ -431,31 +433,39 @@ export function PengaturanPage() {
         // Merge: keep any locally-updated values (like just-uploaded logo paths)
         // but update with server values for everything else
         const merged = { ...settings }
-        // Preserve locally-set app_logo if it was just uploaded
-        // (cache-busted URL like /api/file/blob/app_logo?t=1234)
-        if (prev.app_logo && prev.app_logo !== settings.app_logo) {
-          const prevBase = prev.app_logo.split('?')[0]
-          const serverBase = (settings.app_logo || '').split('?')[0]
-          // Case 1: local has cache-busted version of the same base URL → keep local
-          if (prevBase === serverBase && prev.app_logo.includes('?t=')) {
-            merged.app_logo = prev.app_logo
-          }
-          // Case 2: local has a blob URL but server doesn't → keep local
-          else if (prev.app_logo.startsWith('/api/file/') && !settings.app_logo?.startsWith('/api/file/')) {
-            merged.app_logo = prev.app_logo
-          }
-        }
-        // Same logic for app_favicon
-        if (prev.app_favicon && prev.app_favicon !== settings.app_favicon) {
-          const prevBase = prev.app_favicon.split('?')[0]
-          const serverBase = (settings.app_favicon || '').split('?')[0]
-          if (prevBase === serverBase && prev.app_favicon.includes('?t=')) {
-            merged.app_favicon = prev.app_favicon
-          }
-          else if (prev.app_favicon.startsWith('/api/file/') && !settings.app_favicon?.startsWith('/api/file/')) {
-            merged.app_favicon = prev.app_favicon
+
+        // Helper to preserve cache-busted blob URLs
+        const preserveBlobUrl = (key: string) => {
+          if (prev[key] && prev[key] !== settings[key]) {
+            const prevBase = prev[key].split('?')[0]
+            const serverBase = (settings[key] || '').split('?')[0]
+            // Case 1: local has cache-busted version of the same base URL → keep local
+            if (prevBase === serverBase && prev[key].includes('?t=')) {
+              merged[key] = prev[key]
+            }
+            // Case 2: local has a blob URL but server doesn't → keep local
+            else if (prev[key].startsWith('/api/file/') && !settings[key]?.startsWith('/api/file/')) {
+              merged[key] = prev[key]
+            }
           }
         }
+
+        preserveBlobUrl('app_logo')
+        preserveBlobUrl('app_favicon')
+        preserveBlobUrl('app_tte_image')
+        preserveBlobUrl('app_print_logo')
+
+        // On initial load (prev is empty), add cache-busting to blob URLs
+        // so browser doesn't show stale/cached images
+        if (Object.keys(prev).length === 0) {
+          const blobKeys = ['app_logo', 'app_favicon', 'app_tte_image', 'app_print_logo']
+          for (const key of blobKeys) {
+            if (merged[key] && merged[key].startsWith('/api/file/') && !merged[key].includes('?t=')) {
+              merged[key] = merged[key] + '?t=' + Date.now()
+            }
+          }
+        }
+
         return merged
       })
     }
@@ -540,7 +550,7 @@ export function PengaturanPage() {
       umum: ['nama_instansi', 'tahun_aktif', 'nomor_surat_otomatis', 'format_nomor_surat', 'bengkel_can_create_service'],
       email: ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from_email', 'fonnte_api_key', 'fonnte_admin_phone',
         'notif_service_diajukan', 'notif_service_disetujui', 'notif_service_ditolak', 'notif_service_selesai', 'notif_anggaran_warning'],
-      identitas: ['app_name', 'app_short_name', 'app_description', 'app_instansi', 'app_address', 'app_phone', 'app_email', 'app_kop_line1', 'app_kop_line2', 'app_kop_line3', 'app_kepala_nama', 'app_kepala_nip', 'app_kepala_jabatan', 'app_tempat_ttd', 'app_sekda_nama', 'app_sekda_nip'],
+      identitas: ['app_name', 'app_short_name', 'app_description', 'app_instansi', 'app_address', 'app_phone', 'app_email', 'app_kop_line1', 'app_kop_line2', 'app_kop_line3', 'app_kepala_nama', 'app_kepala_nip', 'app_kepala_jabatan', 'app_tempat_ttd', 'app_kabupaten_kota', 'app_sekda_nama', 'app_sekda_nip', 'app_logo', 'app_favicon', 'app_tte_image', 'app_print_logo'],
     }
     const keys = sectionKeys[section] || []
     const updateData: Record<string, string> = {}
@@ -559,7 +569,7 @@ export function PengaturanPage() {
     updateSettings.mutate(updateData)
   }
 
-  const handleFileUpload = async (file: File, type: 'logo' | 'favicon' | 'tte') => {
+  const handleFileUpload = async (file: File, type: 'logo' | 'favicon' | 'tte' | 'print_logo') => {
     try {
       toast.loading(`Mengupload ${type}...`, { id: `upload-${type}` })
       const formData = new FormData()
@@ -582,9 +592,10 @@ export function PengaturanPage() {
       if (type === 'logo') setLogoTimestamp(Date.now())
       else if (type === 'favicon') setFaviconTimestamp(Date.now())
       else if (type === 'tte') setTteTimestamp(Date.now())
+      else if (type === 'print_logo') setPrintLogoTimestamp(Date.now())
       queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
       queryClient.invalidateQueries({ queryKey: ['app-settings-sidebar'] })
-      const typeLabel = type === 'logo' ? 'Logo' : type === 'favicon' ? 'Favicon' : 'TTE'
+      const typeLabel = type === 'logo' ? 'Logo' : type === 'favicon' ? 'Favicon' : type === 'tte' ? 'TTE' : 'Logo Cetak'
       toast.success(`${typeLabel} berhasil diupload`, { id: `upload-${type}` })
     } catch (err: any) {
       toast.error(err.message || `Gagal mengupload ${type}`, { id: `upload-${type}` })
@@ -969,6 +980,93 @@ export function PengaturanPage() {
               </CardContent>
             </Card>
 
+            {/* Card 2b: Logo Cetak Dokumen */}
+            <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Printer className="h-5 w-5" /> Logo Cetak Dokumen</CardTitle>
+                <CardDescription>Logo khusus untuk dokumen cetak (kop surat). Jika tidak diisi, akan menggunakan Logo Aplikasi.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div
+                    className="h-20 w-20 rounded-xl border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0 cursor-pointer hover:border-primary/50 hover:bg-muted transition-colors"
+                    onClick={() => printLogoInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-primary', 'bg-primary/10') }}
+                    onDragLeave={(e) => { e.currentTarget.classList.remove('border-primary', 'bg-primary/10') }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.currentTarget.classList.remove('border-primary', 'bg-primary/10')
+                      const file = e.dataTransfer.files?.[0]
+                      if (file && file.type.startsWith('image/')) handleFileUpload(file, 'print_logo')
+                    }}
+                  >
+                    {localSettings.app_print_logo ? (
+                      <img
+                        key={printLogoTimestamp}
+                        src={localSettings.app_print_logo}
+                        alt="Logo Cetak"
+                        className="h-20 w-20 rounded-xl object-contain"
+                        onError={(e) => {
+                          const img = e.currentTarget
+                          if (!img.src.includes('onerror=1')) {
+                            const baseUrl = localSettings.app_print_logo?.split('?')[0] || ''
+                            if (baseUrl) {
+                              img.src = baseUrl + '?onerror=1&t=' + Date.now()
+                            } else {
+                              img.style.display = 'none'
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <ImagePlus className="h-8 w-8 text-muted-foreground/40" />
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <input
+                      ref={printLogoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/svg+xml,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleFileUpload(file, 'print_logo')
+                        e.target.value = ''
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => printLogoInputRef.current?.click()}>
+                        <Upload className="h-4 w-4 mr-1" /> Upload Logo Cetak
+                      </Button>
+                      {localSettings.app_print_logo && (
+                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={async () => {
+                          try {
+                            const res = await fetch('/api/pengaturan/upload?type=print_logo', { method: 'DELETE' })
+                            if (res.ok) {
+                              setLocalSettings(s => ({ ...s, app_print_logo: '' }))
+                              setPrintLogoTimestamp(Date.now())
+                              queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
+                              queryClient.invalidateQueries({ queryKey: ['app-settings-sidebar'] })
+                              toast.success('Logo cetak berhasil dihapus')
+                            }
+                          } catch {
+                            toast.error('Gagal menghapus logo cetak')
+                          }
+                        }}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">JPG, PNG, SVG, atau WebP. Maks 2MB.</p>
+                    <p className="text-xs text-muted-foreground">Klik gambar atau drag & drop</p>
+                    {!localSettings.app_print_logo && (
+                      <p className="text-xs text-teal-600 dark:text-teal-400">Fallback: Logo Aplikasi akan digunakan</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Card 3: Kop Surat */}
             <Card className="animate-fade-in animate-stagger-3 border border-border/50 shadow-sm rounded-2xl card-hover">
               <CardHeader>
@@ -1064,6 +1162,18 @@ export function PengaturanPage() {
                       placeholder="Kabupaten/Kota"
                     />
                     <p className="text-xs text-muted-foreground">Tempat penandatanganan yang tampil pada dokumen cetak (contoh: Kabupaten Bandung, Kota Surabaya)</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_kabupaten_kota" className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5" /> Kabupaten/Kota
+                    </Label>
+                    <Input
+                      id="app_kabupaten_kota"
+                      value={localSettings.app_kabupaten_kota || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_kabupaten_kota: e.target.value }))}
+                      placeholder="Kabupaten Bojonegoro"
+                    />
+                    <p className="text-xs text-muted-foreground">Nama Kabupaten/Kota yang tampil di baris tanggal penandatanganan (contoh: Kabupaten Bojonegoro, Kota Surabaya)</p>
                   </div>
 
                 </div>

@@ -11,13 +11,17 @@ const FAVICON_MAX_SIZE = 1 * 1024 * 1024 // 1MB
 const TTE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml']
 const TTE_MAX_SIZE = 2 * 1024 * 1024 // 2MB
 
-const VALID_TYPES = ['logo', 'favicon', 'tte'] as const
+const PRINT_LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/webp']
+const PRINT_LOGO_MAX_SIZE = 2 * 1024 * 1024 // 2MB
+
+const VALID_TYPES = ['logo', 'favicon', 'tte', 'print_logo'] as const
 type UploadType = (typeof VALID_TYPES)[number]
 
 const SETTING_KEY_MAP: Record<string, string> = {
   logo: 'app_logo',
   favicon: 'app_favicon',
   tte: 'app_tte_image',
+  print_logo: 'app_print_logo',
 }
 
 /**
@@ -60,12 +64,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate MIME type and size based on type
-    const allowedTypes = type === 'logo'
+    const allowedTypes = type === 'logo' || type === 'print_logo'
       ? LOGO_ALLOWED_TYPES
       : type === 'favicon'
         ? FAVICON_ALLOWED_TYPES
         : TTE_ALLOWED_TYPES
-    const maxSize = type === 'logo'
+    const maxSize = type === 'logo' || type === 'print_logo'
       ? LOGO_MAX_SIZE
       : type === 'favicon'
         ? FAVICON_MAX_SIZE
@@ -101,7 +105,7 @@ export async function POST(request: NextRequest) {
     // Store as blob file in database (with compression for non-SVG)
     const settingKey = SETTING_KEY_MAP[type]
     // TTE images may have transparency like logos, so skip compression
-    const context: 'logo' | 'favicon' | 'other' = type === 'logo' || type === 'tte' ? 'logo' : type === 'favicon' ? 'favicon' : 'other'
+    const context: 'logo' | 'favicon' | 'other' = type === 'logo' || type === 'tte' || type === 'print_logo' ? 'logo' : type === 'favicon' ? 'favicon' : 'other'
 
     // Create a new File with the correct MIME type if we detected it from extension
     const fileToStore = mimeType !== file.type

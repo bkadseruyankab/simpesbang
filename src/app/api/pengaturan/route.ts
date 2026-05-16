@@ -37,6 +37,8 @@ export async function GET() {
       app_sekda_nama: '',
       app_sekda_nip: '',
       app_tte_image: '',
+      app_print_logo: '',
+      app_kabupaten_kota: '',
     }
 
     for (const [key, defaultValue] of Object.entries(appDefaults)) {

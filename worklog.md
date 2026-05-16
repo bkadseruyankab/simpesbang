@@ -609,3 +609,79 @@ Stage Summary:
 - Jabatan Kepala position moved below Tempat Penandatanganan in all cetak documents
 - All 4 print templates updated with dynamic tempat_ttd
 - Lint: 0 errors, 2 pre-existing warnings
+
+---
+Task ID: 1-3-4-5
+Agent: Main Agent
+Task: Fix logo refresh, add print logo, add Kabupaten/Kota setting, fix QR/TTE in prints, restructure signature layout
+
+Work Log:
+
+1. **Fix logo upload reverting to default after save/refresh**
+   - Added `app_logo`, `app_favicon`, `app_tte_image`, `app_print_logo` to identitas `sectionKeys` so they get saved properly when clicking "Simpan Pengaturan"
+   - Cache-busting query params are stripped before saving to DB (existing logic)
+   - Added cache-busting on initial page load: when `localSettings` is empty (fresh page load), blob URLs get `?t=timestamp` appended automatically
+   - Refactored `useEffect` settings sync to use a `preserveBlobUrl` helper function for all blob URL keys
+
+2. **Create app_print_logo setting and upload UI**
+   - Added `app_print_logo: ''` default to `/api/pengaturan/route.ts` GET defaults
+   - Added `print_logo: 'app_print_logo'` to upload route's `SETTING_KEY_MAP`
+   - Added `PRINT_LOGO_ALLOWED_TYPES` and `PRINT_LOGO_MAX_SIZE` constants (same as logo)
+   - Updated MIME type validation to handle `print_logo` same as `logo`
+   - Added `print_logo` to compression context (skip compression like logos)
+   - Added `printLogoInputRef` and `printLogoTimestamp` state to pengaturan-page
+   - Added "Logo Cetak Dokumen" card in identitas tab with full upload/drag-drop/delete UI
+   - Added `Printer` icon import from lucide-react
+   - Fallback message shows when no print logo is set
+
+3. **Create app_kabupaten_kota setting and input UI**
+   - Added `app_kabupaten_kota: ''` default to pengaturan route.ts
+   - Added `app_kabupaten_kota` to identitas sectionKeys for saving
+   - Added "Kabupaten/Kota" input field in Tanda Tangan card with `MapPin` icon
+   - Helper text explains it appears in the signature date line of print documents
+
+4. **Fix QR code generation for print documents**
+   - Installed `qrcode` npm package and `@types/qrcode`
+   - Created `/src/lib/qrcode-helper.ts` with `generateQRDataURL()` function
+   - Generates QR codes as base64 data URLs (PNG) - no external API dependency
+   - Updated laporan-page.tsx: Added `qrDataUrl` state, generates on mount via useEffect
+   - Updated riwayat-page.tsx: Same approach - `qrDataUrl` state + useEffect
+   - Updated service-page.tsx: Generates QR codes inline in the async onClick handler with `await generateQRDataURL()`
+   - All print templates now use inline base64 QR images instead of external `api.qrserver.com` API
+
+5. **Fix TTE display in print documents**
+   - TTE image paths are now properly resolved with `window.location.origin` prefix
+   - Same 3-tier priority for all print templates: TTE image → canvas signature → empty space
+
+6. **Move Jabatan Kepala below name in ALL print documents**
+   - Restructured signature block order in all 3 files:
+     - OLD: Date → Jabatan → Signature → Name → NIP/TTE-label
+     - NEW: Date → Signature → Name → Jabatan → NIP/TTE-label
+   - Added `.sig-jabatan` CSS class in all print style blocks
+   - Updated laporan-page.tsx print preview mini-signature to match new layout
+   - Applied to both `handlePrintReport` and `handlePrintItemsReport` in laporan-page.tsx
+
+7. **Update ALL print templates consistently**
+   - **Kop surat logo**: Changed from `settings.app_logo` to `settings.app_print_logo || settings.app_logo` in all 3 files
+   - **Signature date line**: Changed from `settings.app_tempat_ttd || 'Kabupaten/Kota'` to `settings.app_kabupaten_kota || settings.app_tempat_ttd || 'Kabupaten/Kota'` in all 3 files
+   - **QR codes**: All replaced from external API to inline base64 data URLs
+   - **Signature layout**: All use new order (Date → Signature → Name → Jabatan → NIP/TTE)
+
+Files modified:
+- `/src/app/api/pengaturan/route.ts` - Added `app_print_logo`, `app_kabupaten_kota` defaults
+- `/src/app/api/pengaturan/upload/route.ts` - Added `print_logo` upload type with validation
+- `/src/lib/qrcode-helper.ts` - Created QR code helper (new file)
+- `/src/components/pengaturan/pengaturan-page.tsx` - Logo cache-busting fix, print logo upload UI, Kabupaten/Kota input, added blob keys to sectionKeys
+- `/src/components/laporan/laporan-page.tsx` - Inline QR codes, print logo fallback, Kabupaten/Kota in sig, restructured signature layout
+- `/src/components/riwayat/riwayat-page.tsx` - Same changes as laporan
+- `/src/components/service/service-page.tsx` - Same changes as laporan, async onClick for QR generation
+
+Stage Summary:
+- Logo no longer reverts to default on refresh (cache-busting on initial load + blob keys in sectionKeys)
+- New "Logo Cetak Dokumen" upload available in Identitas tab
+- New "Kabupaten/Kota" input available in Tanda Tangan section
+- QR codes now generated inline (no external API dependency)
+- TTE images properly displayed in print documents
+- Jabatan Kepala position moved below Name in all cetak documents
+- All 3 print-enabled files updated consistently
+- Lint: 0 errors, 2 pre-existing warnings

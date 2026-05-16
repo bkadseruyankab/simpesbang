@@ -42,6 +42,7 @@ import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { generateQRDataURL } from '@/lib/qrcode-helper'
 import { format } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
 import { toast } from '@/hooks/use-toast'
@@ -239,6 +240,8 @@ export function ServicePage() {
 
   // Fetch Kepala BKAD signature for print documents
   const [kepalaSignature, setKepalaSignature] = useState<string | null>(null)
+  const [qrDocDataUrl, setQrDocDataUrl] = useState<string>('')
+  const [qrVehicleDataUrl, setQrVehicleDataUrl] = useState<string>('')
   const kepalaSigFetched = useRef(false)
   useEffect(() => {
     if (kepalaSigFetched.current) return
@@ -260,6 +263,13 @@ export function ServicePage() {
         }
       })
       .catch(() => {})
+  }, [])
+
+  // Pre-generate QR code data URLs for print documents
+  // (these will be regenerated with actual data when printing)
+  useEffect(() => {
+    generateQRDataURL(window.location.origin, 150).then(setQrDocDataUrl).catch(() => {})
+    generateQRDataURL('vehicle-info', 100).then(setQrVehicleDataUrl).catch(() => {})
   }, [])
 
   // canCreateService check:
@@ -1421,7 +1431,7 @@ export function ServicePage() {
                           variant="outline"
                           size="sm"
                           className="gap-1.5 rounded-lg border-border/50 hover:border-teal-500/50 hover:text-teal-600"
-                          onClick={() => {
+                          onClick={async () => {
                             const settings = (settingsData || {}) as Record<string, string>
                             const printItems = Array.isArray(detail.items) ? detail.items : []
                             const itemsSubtotal = printItems.reduce((sum: number, item: any) => sum + (item.totalHarga || 0), 0)
@@ -1429,8 +1439,8 @@ export function ServicePage() {
                             const docNumber = `${String(Math.floor(Math.random() * 900) + 100)}/BKAD/TIMELINE/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`
 
                             // Build KOP SURAT HTML
-                            const kopLogoHtml = settings.app_logo
-                              ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:0;object-fit:contain;" />`
+                            const kopLogoHtml = settings.app_print_logo || settings.app_logo
+                              ? `<img src="${window.location.origin}${settings.app_print_logo || settings.app_logo}" style="width:60px;height:60px;border-radius:0;object-fit:contain;" />`
                               : `<div class="kop-logo-inner">LOGO</div>`
                             const kopHtml = `<div class="kop-surat"><div class="kop-content"><div class="kop-logo">${kopLogoHtml}</div><div class="kop-text"><div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div><div class="kop-line2">${settings.app_kop_line2 || 'BADAN KEUANGAN DAN ASET DAERAH'}</div><div class="kop-line3">${settings.app_kop_line3 || 'UNIT LAYANAN PENGADAAN'}</div><div class="kop-address">${settings.app_address || 'Jl. Merdeka No. 1, Kota Selatan | Telp. (021) 123-4567 | Email: bkad@pemda.go.id'}</div></div></div><div class="kop-border"><div class="kop-border-inner"></div></div></div>`
 
@@ -1449,10 +1459,18 @@ export function ServicePage() {
                             ).join('')
 
                             // Build signature HTML with QR code for document and vehicle
-                            const docQrData = encodeURIComponent(`${window.location.origin}/api/service/${detail.id}`)
+                            const docQrData = `${window.location.origin}/api/service/${detail.id}`
                             const vehicleInfo = `${detail.vehicle?.nomorPolisi || '-'}|${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}|${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}|${detail.vehicle?.nomorRangka || '-'}|${detail.vehicle?.nomorMesin || '-'}`
-                            const vehicleQrData = encodeURIComponent(vehicleInfo)
-                            const sigHtml = `<div class="signature-section"><div class="sig-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${docQrData}" alt="QR Code Dokumen" /><div class="sig-qr-label">Scan untuk detail service</div></div><div class="sig-block"><div class="sig-date">${settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div><div class="sig-title" style="margin-bottom:4px;">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>${settings.app_tte_image ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>` : kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div>${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}</div></div><div class="vehicle-qr-section"><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${vehicleQrData}" alt="QR Code Kendaraan" /><div class="vehicle-qr-info"><div class="vehicle-qr-title">QR Code Kendaraan</div><div class="vehicle-qr-detail">${detail.vehicle?.nomorPolisi || '-'} &bull; ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}<br/>${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}${detail.vehicle?.nomorRangka ? ` | Rangka: ${detail.vehicle.nomorRangka}` : ''}${detail.vehicle?.nomorMesin ? ` | Mesin: ${detail.vehicle.nomorMesin}` : ''}</div></div></div>`
+                            // Generate QR codes synchronously for print (using pre-generated data URLs as fallback)
+                            let docQrImgHtml = `<div style="width:120px;height:120px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8pt;color:#888;">QR Code</div>`
+                            let vehicleQrImgHtml = `<div style="width:100px;height:100px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:7pt;color:#888;">QR Code</div>`
+                            try {
+                              const docQr = await generateQRDataURL(docQrData, 150)
+                              if (docQr) docQrImgHtml = `<img src="${docQr}" alt="QR Code Dokumen" style="width:120px;height:120px;" />`
+                              const vehQr = await generateQRDataURL(vehicleInfo, 100)
+                              if (vehQr) vehicleQrImgHtml = `<img src="${vehQr}" alt="QR Code Kendaraan" style="width:100px;height:100px;" />`
+                            } catch {}
+                            const sigHtml = `<div class="signature-section"><div class="sig-qr">${docQrImgHtml}<div class="sig-qr-label">Scan untuk detail service</div></div><div class="sig-block"><div class="sig-date">${settings.app_kabupaten_kota || settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div>${settings.app_tte_image ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>` : kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-jabatan">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}</div></div><div class="vehicle-qr-section">${vehicleQrImgHtml}<div class="vehicle-qr-info"><div class="vehicle-qr-title">QR Code Kendaraan</div><div class="vehicle-qr-detail">${detail.vehicle?.nomorPolisi || '-'} &bull; ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}<br/>${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}${detail.vehicle?.nomorRangka ? ` | Rangka: ${detail.vehicle.nomorRangka}` : ''}${detail.vehicle?.nomorMesin ? ` | Mesin: ${detail.vehicle.nomorMesin}` : ''}</div></div></div>`
 
                             const printHtml = `<!DOCTYPE html>
 <html lang="id">
@@ -1516,6 +1534,7 @@ export function ServicePage() {
   .sig-block { text-align: center; width: 220px; }
   .sig-date { font-size: 9pt; margin-bottom: 4px; }
   .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
+  .sig-jabatan { font-size: 8.5pt; font-weight: bold; }
   .sig-title { font-size: 8.5pt; font-weight: bold; }
   .sig-nip { font-size: 8pt; color: #555; }
   .sig-tte-label { font-size: 7.5pt; color: #888; font-style: italic; }

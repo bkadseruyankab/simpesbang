@@ -542,15 +542,14 @@ export function BengkelProfile({ isAdmin = false, bengkelId: propBengkelId }: Be
       })
     }
 
-    setSelectedFiles((prev) => {
-      const combined = [...prev, ...valid]
-      if (combined.length > MAX_FILES) {
-        setFileError(`Maksimal ${MAX_FILES} file per upload.`)
-        return combined.slice(0, MAX_FILES)
-      }
-      return combined
-    })
-  }, [])
+    const combined = [...selectedFiles, ...valid]
+    if (combined.length > MAX_FILES) {
+      setFileError(`Maksimal ${MAX_FILES} file per upload.`)
+      setSelectedFiles(combined.slice(0, MAX_FILES))
+    } else {
+      setSelectedFiles(combined)
+    }
+  }, [selectedFiles])
 
   function removeFile(id: string) {
     setSelectedFiles((prev) => {

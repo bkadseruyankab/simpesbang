@@ -9,8 +9,10 @@ import {
   Plus, Search, Filter, Edit2, Trash2, Eye, Download, Upload,
   X, FileText, Bike, Car, ChevronLeft, ChevronRight, MoreHorizontal,
   Wallet, DollarSign, TrendingUp, TrendingDown, AlertCircle, PackageOpen,
-  Gauge, CheckCircle2, XCircle, AlertTriangle, Wrench, Hash, Palette, Clock
+  Gauge, CheckCircle2, XCircle, AlertTriangle, Wrench, Hash, Palette, Clock,
+  QrCode, Printer, Copy
 } from 'lucide-react'
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import { useRef } from 'react'
 
 const vehicleSchema = z.object({
   nomorPolisi: z.string().min(1, 'Nomor polisi wajib diisi'),
@@ -80,6 +83,10 @@ export function KendaraanPage() {
   const [showDetail, setShowDetail] = useState(false)
   const [selectedVehicle, setSelectedVehicle] = useState<any>(null)
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [showQrCode, setShowQrCode] = useState(false)
+  const [qrData, setQrData] = useState<{ hash: string; qrUrl: string } | null>(null)
+  const [qrLoading, setQrLoading] = useState(false)
+  const qrCanvasRef = useRef<HTMLDivElement>(null)
   const limit = 10
 
   // Debounce search
@@ -767,6 +774,162 @@ export function KendaraanPage() {
                   </CardContent>
                 </Card>
 
+                {/* QR Code Section */}
+                <Card className="rounded-2xl border border-border/50 shadow-sm bg-gradient-to-br from-card to-muted/20 animate-scale-in">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <div className="h-1 w-5 rounded-full bg-violet-600 dark:bg-violet-400" />
+                      <QrCode className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                      QR Code Kendaraan
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col items-center gap-3">
+                      {detailData.qrCodeHash ? (
+                        <>
+                          <div className="p-3 bg-white rounded-xl border border-border/30 shadow-sm">
+                            <QRCodeSVG
+                              value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/kendaraan/qr/${detailData.qrCodeHash}`}
+                              size={160}
+                              level="M"
+                              includeMargin={false}
+                              bgColor="#ffffff"
+                              fgColor="#0f172a"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 w-full">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-8 rounded-lg text-xs gap-1.5"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch('/api/kendaraan/generate-qr', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ vehicleId: detailData.id }),
+                                  })
+                                  const data = await res.json()
+                                  if (data.qrUrl) {
+                                    setQrData({ hash: data.hash, qrUrl: data.qrUrl })
+                                    setShowQrCode(true)
+                                  }
+                                } catch {
+                                  toast.error('Gagal membuat QR code')
+                                }
+                              }}
+                            >
+                              <QrCode className="h-3.5 w-3.5" />
+                              Lihat QR
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-8 rounded-lg text-xs gap-1.5"
+                              onClick={async () => {
+                                try {
+                                  setQrLoading(true)
+                                  const res = await fetch('/api/kendaraan/generate-qr', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ vehicleId: detailData.id }),
+                                  })
+                                  const data = await res.json()
+                                  if (data.qrUrl) {
+                                    // Use canvas to generate downloadable PNG
+                                    const canvas = document.createElement('canvas')
+                                    const size = 400
+                                    canvas.width = size + 80
+                                    canvas.height = size + 120
+                                    const ctx = canvas.getContext('2d')!
+                                    // White background
+                                    ctx.fillStyle = '#ffffff'
+                                    ctx.fillRect(0, 0, canvas.width, canvas.height)
+                                    // Draw QR code using a temp element
+                                    const tempDiv = document.createElement('div')
+                                    document.body.appendChild(tempDiv)
+                                    const root = await import('react-dom/client').then(m => m.createRoot(tempDiv))
+                                    const React = await import('react')
+                                    root.render(React.createElement(QRCodeCanvas, {
+                                      value: `${window.location.origin}${data.qrUrl}`,
+                                      size: size,
+                                      level: 'M',
+                                      bgColor: '#ffffff',
+                                      fgColor: '#0f172a',
+                                    }))
+                                    await new Promise(r => setTimeout(r, 100))
+                                    const qrCanvas = tempDiv.querySelector('canvas')
+                                    if (qrCanvas) {
+                                      ctx.drawImage(qrCanvas, 40, 20)
+                                    }
+                                    // Add text label below
+                                    ctx.fillStyle = '#0f172a'
+                                    ctx.font = 'bold 18px sans-serif'
+                                    ctx.textAlign = 'center'
+                                    ctx.fillText(detailData.nomorPolisi, canvas.width / 2, size + 50)
+                                    ctx.font = '14px sans-serif'
+                                    ctx.fillStyle = '#64748b'
+                                    ctx.fillText(`${detailData.merk} ${detailData.type} | ${detailData.tahun}`, canvas.width / 2, size + 75)
+                                    // Download
+                                    const link = document.createElement('a')
+                                    link.download = `QR-${detailData.nomorPolisi}.png`
+                                    link.href = canvas.toDataURL('image/png')
+                                    link.click()
+                                    document.body.removeChild(tempDiv)
+                                    root.unmount()
+                                    toast.success('QR code berhasil diunduh')
+                                  }
+                                } catch {
+                                  toast.error('Gagal mengunduh QR code')
+                                } finally {
+                                  setQrLoading(false)
+                                }
+                              }}
+                              disabled={qrLoading}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              {qrLoading ? 'Memproses...' : 'Unduh PNG'}
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex h-40 w-40 items-center justify-center rounded-xl border-2 border-dashed border-border/50 bg-muted/20">
+                            <QrCode className="h-12 w-12 text-muted-foreground/30" />
+                          </div>
+                          <p className="text-xs text-muted-foreground text-center">QR code belum dibuat untuk kendaraan ini</p>
+                          <Button
+                            size="sm"
+                            className="h-8 rounded-lg text-xs gap-1.5"
+                            onClick={async () => {
+                              try {
+                                setQrLoading(true)
+                                const res = await fetch('/api/kendaraan/generate-qr', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ vehicleId: detailData.id }),
+                                })
+                                const data = await res.json()
+                                if (data.qrUrl) {
+                                  await queryClient.invalidateQueries({ queryKey: ['kendaraan-detail'] })
+                                  toast.success(data.existing ? 'QR code sudah ada' : 'QR code berhasil dibuat')
+                                }
+                              } catch {
+                                toast.error('Gagal membuat QR code')
+                              } finally {
+                                setQrLoading(false)
+                              }
+                            }}
+                            disabled={qrLoading}
+                          >
+                            {qrLoading ? 'Memproses...' : 'Buat QR Code'}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {/* Edit Button */}
                 <div className="flex gap-2 pt-2">
                   <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-lg" onClick={() => { setShowDetail(false); openEdit(detailData) }}>
@@ -785,6 +948,147 @@ export function KendaraanPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* QR Code Detail Dialog */}
+      <Dialog open={showQrCode} onOpenChange={setShowQrCode}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600/10 dark:bg-violet-400/10">
+                <QrCode className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+              </div>
+              QR Code Kendaraan
+            </DialogTitle>
+            <DialogDescription>
+              Cetak atau unduh QR code untuk ditempel pada kendaraan
+            </DialogDescription>
+          </DialogHeader>
+          {qrData && (
+            <div className="flex flex-col items-center gap-4 py-2">
+              <div ref={qrCanvasRef} className="p-4 bg-white rounded-xl border border-border/30 shadow-sm">
+                <QRCodeSVG
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}${qrData.qrUrl}`}
+                  size={200}
+                  level="M"
+                  bgColor="#ffffff"
+                  fgColor="#0f172a"
+                />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-semibold">{detailData?.nomorPolisi}</p>
+                <p className="text-xs text-muted-foreground">{detailData?.merk} {detailData?.type} &bull; {detailData?.tahun}</p>
+              </div>
+              <div className="flex items-center gap-2 w-full">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-9 rounded-lg text-xs gap-1.5"
+                  onClick={async () => {
+                    try {
+                      const canvas = document.createElement('canvas')
+                      const size = 400
+                      canvas.width = size + 80
+                      canvas.height = size + 120
+                      const ctx = canvas.getContext('2d')!
+                      ctx.fillStyle = '#ffffff'
+                      ctx.fillRect(0, 0, canvas.width, canvas.height)
+                      // Use QRCodeCanvas approach
+                      const tempDiv = document.createElement('div')
+                      document.body.appendChild(tempDiv)
+                      const root = await import('react-dom/client').then(m => m.createRoot(tempDiv))
+                      const React = await import('react')
+                      root.render(React.createElement(QRCodeCanvas, {
+                        value: `${window.location.origin}${qrData.qrUrl}`,
+                        size: size,
+                        level: 'M',
+                        bgColor: '#ffffff',
+                        fgColor: '#0f172a',
+                      }))
+                      await new Promise(r => setTimeout(r, 100))
+                      const qrCanvas = tempDiv.querySelector('canvas')
+                      if (qrCanvas) {
+                        ctx.drawImage(qrCanvas, 40, 20)
+                      }
+                      ctx.fillStyle = '#0f172a'
+                      ctx.font = 'bold 20px sans-serif'
+                      ctx.textAlign = 'center'
+                      ctx.fillText(detailData?.nomorPolisi || '', canvas.width / 2, size + 55)
+                      ctx.font = '15px sans-serif'
+                      ctx.fillStyle = '#64748b'
+                      ctx.fillText(`${detailData?.merk} ${detailData?.type} | ${detailData?.tahun}`, canvas.width / 2, size + 80)
+                      const link = document.createElement('a')
+                      link.download = `QR-${detailData?.nomorPolisi}.png`
+                      link.href = canvas.toDataURL('image/png')
+                      link.click()
+                      document.body.removeChild(tempDiv)
+                      root.unmount()
+                      toast.success('QR code berhasil diunduh')
+                    } catch {
+                      toast.error('Gagal mengunduh QR code')
+                    }
+                  }}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Unduh PNG
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-9 rounded-lg text-xs gap-1.5"
+                  onClick={async () => {
+                    try {
+                      // Copy QR URL to clipboard
+                      const url = `${window.location.origin}${qrData.qrUrl}`
+                      await navigator.clipboard.writeText(url)
+                      toast.success('Link QR code disalin ke clipboard')
+                    } catch {
+                      toast.error('Gagal menyalin link')
+                    }
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Salin Link
+                </Button>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-9 rounded-lg text-xs gap-1.5"
+                onClick={() => {
+                  // Print QR label
+                  const printContent = `
+                    <html><head><title>QR Code - ${detailData?.nomorPolisi}</title>
+                    <style>
+                      body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: sans-serif; }
+                      .label { text-align: center; padding: 20px; }
+                      .label img { margin: 0 auto; }
+                      .label h2 { margin: 10px 0 5px; font-size: 18px; }
+                      .label p { margin: 2px 0; color: #666; font-size: 14px; }
+                    </style></head><body>
+                    <div class="label">
+                      <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : ''}${qrData.qrUrl}`)}" width="200" height="200" />
+                      <h2>${detailData?.nomorPolisi}</h2>
+                      <p>${detailData?.merk} ${detailData?.type} | ${detailData?.tahun}</p>
+                      <p>${detailData?.skpdBidang}</p>
+                    </div>
+                    </body></html>`
+                  const printWindow = window.open('', '_blank')
+                  if (printWindow) {
+                    printWindow.document.write(printContent)
+                    printWindow.document.close()
+                    printWindow.onload = () => {
+                      printWindow.print()
+                    }
+                  }
+                }}
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Cetak Label QR
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

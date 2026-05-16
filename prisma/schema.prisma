@@ -23,6 +23,7 @@ model User {
   notifications Notification[] @relation("UserNotifications")
   auditLogs    AuditLog[]
   budgetHistories BudgetHistory[]
+  signatures   Signature[]
 
   @@map("users")
 }
@@ -43,6 +44,7 @@ model Vehicle {
   kondisiKendaraan String   @default("BAIK") // BAIK, KURANG_BAIK, RUSAK
   kilometerTerakhir Int     @default(0)
   fotoUrl          String?
+  qrCodeHash      String?  @unique // Unique hash for QR code URL
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -323,4 +325,16 @@ model BlobFile {
   updatedAt DateTime @updatedAt
 
   @@map("blob_files")
+}
+
+model Signature {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imageData String   // Base64 encoded signature image (PNG)
+  isActive  Boolean  @default(true) // Only one active signature per user
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("signatures")
 }

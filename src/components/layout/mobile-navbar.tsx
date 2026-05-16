@@ -5,6 +5,7 @@ import { useNavigationStore, type PageKey } from '@/store/navigation'
 import { useAuthStore } from '@/store/auth'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { QrScanner } from '@/components/shared/qr-scanner'
 import {
   Sheet,
   SheetContent,
@@ -24,6 +25,7 @@ import {
   Bell,
   Menu,
   UserCircle,
+  ScanLine,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -95,6 +97,10 @@ const moreNavByRole: Record<string, MoreNavItem[]> = {
     { key: 'laporan', label: 'Laporan', icon: FileBarChart, group: 'Laporan' },
     { key: 'pengaturan', label: 'Pengaturan', icon: Settings, group: 'Sistem' },
   ],
+  BENGKEL: [
+    { key: 'kendaraan' as PageKey, label: 'Kendaraan', icon: Car, group: 'Utama' },
+    { key: 'riwayat' as PageKey, label: 'Riwayat', icon: History, group: 'Laporan' },
+  ],
   PIMPINAN: [
     { key: 'kendaraan', label: 'Kendaraan', icon: Car, group: 'Utama' },
     { key: 'riwayat', label: 'Riwayat', icon: History, group: 'Laporan' },
@@ -113,6 +119,7 @@ export function MobileNavbar() {
   const [serviceBadgeCount, setServiceBadgeCount] = useState(0)
   const [notifBadgeCount, setNotifBadgeCount] = useState(0)
   const [moreSheetOpen, setMoreSheetOpen] = useState(false)
+  const [showQrScanner, setShowQrScanner] = useState(false)
 
   const bottomItems = bottomNavByRole[userRole] || bottomNavByRole.ADMIN
   const moreItems = moreNavByRole[userRole] || []
@@ -366,6 +373,28 @@ export function MobileNavbar() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* QR Scanner for mobile - available for BENGKEL and ADMIN roles */}
+      {(userRole === 'BENGKEL' || userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') && (
+        <button
+          onClick={() => setShowQrScanner(true)}
+          className={cn(
+            'fixed z-50 md:hidden',
+            'bottom-[76px] right-4',
+            'flex h-12 w-12 items-center justify-center',
+            'rounded-full shadow-lg shadow-teal-500/30',
+            'bg-gradient-to-br from-teal-500 to-emerald-600 text-white',
+            'transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]',
+            'active:scale-90 active:duration-100',
+            'hover:shadow-xl hover:shadow-teal-500/40 hover:scale-105'
+          )}
+          aria-label="Scan QR Kendaraan"
+        >
+          <ScanLine className="h-5 w-5 stroke-[2.5px]" />
+        </button>
+      )}
+
+      <QrScanner open={showQrScanner} onOpenChange={setShowQrScanner} />
 
       {/* Custom keyframes for badge animation */}
       <style jsx global>{`

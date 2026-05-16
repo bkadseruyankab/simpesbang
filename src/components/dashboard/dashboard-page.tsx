@@ -7,7 +7,7 @@ import {
   Bike, Car, Wrench, CheckCircle2, Wallet, TrendingUp, PiggyBank,
   AlertTriangle, Clock, Bell, ArrowUpRight, ArrowDownRight,
   RefreshCw, Activity, Building2, Eye, FileCheck, FileX,
-  Sun, Moon, CloudSun, Sparkles
+  Sun, Moon, CloudSun, Sparkles, ScanLine
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -191,6 +191,22 @@ export function DashboardPage() {
       {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
+          {/* Quick Scan Card */}
+          {(isAdmin || isBengkel) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-xl border-teal-200 dark:border-teal-800 text-xs gap-1.5 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 dark:hover:bg-teal-950/30 dark:hover:text-teal-400 dark:hover:border-teal-700 transition-colors"
+              onClick={() => {
+                // Trigger QR scanner via a custom event
+                const event = new CustomEvent('open-qr-scanner')
+                window.dispatchEvent(event)
+              }}
+            >
+              <ScanLine className="h-3.5 w-3.5" />
+              Scan QR
+            </Button>
+          )}
           <div className="flex items-center gap-1.5 bg-muted/60 backdrop-blur-sm rounded-xl p-1 border border-border/30">
             <Select value={tahun} onValueChange={setTahun}>
               <SelectTrigger className="w-[100px] h-8 text-xs border-0 bg-transparent shadow-none focus:ring-0 px-3 hover:bg-background/80 rounded-lg">

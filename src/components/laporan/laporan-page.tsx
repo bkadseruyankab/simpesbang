@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -134,6 +134,34 @@ export function LaporanPage() {
     queryFn: async () => { const res = await fetch('/api/pengaturan'); return res.json() },
   })
   const settings = (settingsRaw || {}) as Record<string, string>
+
+  // Fetch Kepala BKAD signature for print documents
+  const [kepalaSignature, setKepalaSignature] = useState<string | null>(null)
+  const kepalaSigFetched = useRef(false)
+  useEffect(() => {
+    if (kepalaSigFetched.current) return
+    kepalaSigFetched.current = true
+    // Fetch all users with PIMPINAN role to find Kepala BKAD's signature
+    fetch('/api/pengaturan/users')
+      .then(r => r.json())
+      .then(users => {
+        const pimpinanUsers = Array.isArray(users) ? users.filter((u: any) => u.role === 'PIMPINAN') : []
+        // Also check for SUPER_ADMIN/ADMIN as fallback
+        const sigCandidates = pimpinanUsers.length > 0 ? pimpinanUsers : (Array.isArray(users) ? users.filter((u: any) => ['SUPER_ADMIN', 'ADMIN'].includes(u.role)) : [])
+        if (sigCandidates.length > 0) {
+          // Try to get signature for the first eligible user
+          fetch(`/api/signature/verify?userId=${sigCandidates[0].id}`)
+            .then(r => r.json())
+            .then(data => {
+              if (data.hasSignature && data.signature?.imageData) {
+                setKepalaSignature(data.signature.imageData)
+              }
+            })
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // Extract unique SKPD/Bidang from vehicles
   const skpdOptions = useMemo(() => {
@@ -404,18 +432,14 @@ export function LaporanPage() {
 
   /* SIGNATURE */
   .signature-section { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-start; }
-  .sig-qr { width: 90px; text-align: center; }
-  .sig-qr-box { width: 80px; height: 80px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; margin: 0 auto; font-size: 7pt; color: #888; }
-  .sig-qr-label { font-size: 7pt; color: #888; margin-top: 3px; }
+  .sig-qr { width: 140px; text-align: center; }
+  .sig-qr img { width: 120px; height: 120px; border: 1px solid #ccc; border-radius: 4px; }
+  .sig-qr-label { font-size: 7.5pt; color: #555; margin-top: 4px; line-height: 1.3; }
   .sig-block { text-align: center; width: 220px; }
   .sig-date { font-size: 9pt; margin-bottom: 4px; }
   .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
   .sig-title { font-size: 8.5pt; font-weight: bold; }
   .sig-nip { font-size: 8pt; color: #555; }
-
-  .sig-bottom { margin-top: 30px; text-align: center; }
-  .sig-bottom-know { font-size: 9pt; margin-bottom: 4px; }
-  .sig-bottom-block { display: inline-block; text-align: center; width: 220px; }
 
   /* PHOTOS */
   .photo-section { margin: 14px 0; }
@@ -621,25 +645,15 @@ export function LaporanPage() {
   <!-- SIGNATURE -->
   <div class="signature-section">
     <div class="sig-qr">
-      <div class="sig-qr-box">QR Code<br/>Validasi</div>
-      <div class="sig-qr-label">Dokumen ini telah divalidasi secara digital</div>
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin)}" alt="QR Code Verifikasi" />
+      <div class="sig-qr-label">Scan untuk verifikasi dokumen</div>
     </div>
     <div class="sig-block">
       <div class="sig-date">Kabupaten/Kota, ${printDate}</div>
-      <div style="height:60px;"></div>
+      ${kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}
       <div class="sig-name">${settings.app_kepala_nama || '________________________'}</div>
       <div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
       <div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div>
-    </div>
-  </div>
-
-  <div class="sig-bottom">
-    <div class="sig-bottom-know">Mengetahui,</div>
-    <div class="sig-bottom-block">
-      <div style="height:50px;"></div>
-      <div class="sig-name">${settings.app_sekda_nama || '________________________'}</div>
-      <div class="sig-title">Sekretaris Daerah</div>
-      <div class="sig-nip">${settings.app_sekda_nip ? `NIP. ${settings.app_sekda_nip}` : 'NIP. ________________________'}</div>
     </div>
   </div>
   ` : ''}
@@ -666,7 +680,7 @@ export function LaporanPage() {
     }
     toast.success('Laporan resmi berhasil dicetak')
     setPrintDialogOpen(false)
-  }, [data, filteredServices, getDocNumber, getReportTitle, getPeriodLabel, formatRupiah, printSections, settings])
+  }, [data, filteredServices, getDocNumber, getReportTitle, getPeriodLabel, formatRupiah, printSections, settings, kepalaSignature])
 
   const handleDownloadPDF = useCallback(() => {
     // Use the same HTML for PDF download
@@ -708,7 +722,7 @@ export function LaporanPage() {
 
     // Build signature HTML
     const sigHtml = printItemsSignature
-      ? `<div class="signature-section"><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div><div style="height:60px;"></div><div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div><div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div></div></div>`
+      ? `<div class="signature-section"><div class="sig-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin)}" alt="QR Code Verifikasi" style="width:120px;height:120px;border:1px solid #ccc;border-radius:4px;" /><div style="font-size:7.5pt;color:#555;margin-top:4px;line-height:1.3;">Scan untuk verifikasi dokumen</div></div><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div>${kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div><div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div></div></div>`
       : ''
 
     const html = `<!DOCTYPE html>
@@ -789,7 +803,7 @@ export function LaporanPage() {
     }
     toast.success('Laporan item perbaikan berhasil dicetak')
     setPrintItemsDialogOpen(false)
-  }, [filteredServices, getDocNumber, getPeriodLabel, formatRupiah, printItemsSignature, settings])
+  }, [filteredServices, getDocNumber, getPeriodLabel, formatRupiah, printItemsSignature, settings, kepalaSignature])
 
   if (isLoading) {
     return (

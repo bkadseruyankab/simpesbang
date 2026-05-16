@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -41,9 +41,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare, Zap, FileDown, TrendingDown, BarChart3, CheckCircle, Camera, HardDrive, FileArchive, Paperclip, ImagePlus } from 'lucide-react'
+import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare, Zap, FileDown, TrendingDown, BarChart3, CheckCircle, Camera, HardDrive, FileArchive, Paperclip, ImagePlus, PenTool } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/store/auth'
+import { ESignatureDialog } from '@/components/shared/e-signature-dialog'
 
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
@@ -61,10 +63,12 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
 
 export function PengaturanPage() {
   const queryClient = useQueryClient()
+  const { user: authUser } = useAuthStore()
   const [activeTab, setActiveTab] = useState('umum')
   const [userDialogOpen, setUserDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<any>(null)
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '', isActive: true })
+  const [signatureDialogOpen, setSignatureDialogOpen] = useState(false)
 
   // Refs for file inputs
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -117,6 +121,37 @@ export function PengaturanPage() {
     queryFn: async () => {
       const res = await fetch('/api/pengaturan/backup')
       return res.json()
+    },
+  })
+
+  // Fetch current user's signature
+  const { data: signatureData, isLoading: loadingSignature } = useQuery({
+    queryKey: ['user-signature', authUser?.id],
+    queryFn: async () => {
+      if (!authUser?.id) return { signature: null }
+      const res = await fetch(`/api/signature?userId=${authUser.id}`)
+      return res.json()
+    },
+    enabled: !!authUser?.id,
+  })
+  const currentSignature = signatureData?.signature || null
+
+  // Delete signature mutation
+  const deleteSignature = useMutation({
+    mutationFn: async (signatureId: string) => {
+      const res = await fetch(`/api/signature/${signatureId}?userId=${authUser?.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Gagal menghapus tanda tangan')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-signature', authUser?.id] })
+      toast.success('Tanda tangan berhasil dihapus')
+    },
+    onError: (err: Error) => {
+      toast.error(err.message)
     },
   })
 
@@ -317,7 +352,7 @@ export function PengaturanPage() {
     enabled: true, quality: 80, maxWidth: 1920, maxHeight: 1080,
     format: 'original' as string, compressPhotos: true, compressDocuments: true, compressLogo: true,
   })
-  const [compressLoaded, setCompressLoaded] = useState(false)
+  const compressLoadedRef = useRef(false)
   const [compressStats, setCompressStats] = useState({ totalSaved: 0, totalFiles: 0 })
 
   // Storage stats state
@@ -329,7 +364,7 @@ export function PengaturanPage() {
     blobFiles: { count: number; totalSize: number }
     total: { count: number; totalSize: number }
   } | null>(null)
-  const [storageLoaded, setStorageLoaded] = useState(false)
+  const storageLoadedRef = useRef(false)
 
   const handleTestWhatsApp = async () => {
     if (!localSettings.fonnte_api_key) {
@@ -424,9 +459,10 @@ export function PengaturanPage() {
     }
   }, [settings])
 
-  // Fetch compression settings
+  // Fetch compression settings (one-time, using ref to avoid re-trigger)
   useEffect(() => {
-    if (compressLoaded) return
+    if (compressLoadedRef.current) return
+    compressLoadedRef.current = true
     fetch('/api/pengaturan/compress')
       .then(res => res.json())
       .then(data => {
@@ -441,22 +477,21 @@ export function PengaturanPage() {
           compressLogo: data.compressLogo !== false,
         })
         setCompressStats({ totalSaved: data.totalSaved || 0, totalFiles: data.totalFiles || 0 })
-        setCompressLoaded(true)
       })
-      .catch(() => setCompressLoaded(true))
-  }, [compressLoaded])
+      .catch(() => {})
+  }, [])
 
-  // Fetch storage stats
+  // Fetch storage stats (one-time, using ref to avoid re-trigger)
   useEffect(() => {
-    if (storageLoaded) return
+    if (storageLoadedRef.current) return
+    storageLoadedRef.current = true
     fetch('/api/pengaturan/storage')
       .then(res => res.json())
       .then(data => {
         setStorageStats(data)
-        setStorageLoaded(true)
       })
-      .catch(() => setStorageLoaded(true))
-  }, [storageLoaded])
+      .catch(() => {})
+  }, [])
 
   // Handle save compression settings
   const handleSaveCompressSettings = async () => {
@@ -1016,25 +1051,91 @@ export function PengaturanPage() {
                       placeholder="Kepala BKAD"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="app_sekda_nama">Nama Sekretaris Daerah</Label>
-                    <Input
-                      id="app_sekda_nama"
-                      value={localSettings.app_sekda_nama || ''}
-                      onChange={(e) => setLocalSettings(s => ({ ...s, app_sekda_nama: e.target.value }))}
-                      placeholder="Nama Sekretaris Daerah"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="app_sekda_nip">NIP Sekretaris Daerah</Label>
-                    <Input
-                      id="app_sekda_nip"
-                      value={localSettings.app_sekda_nip || ''}
-                      onChange={(e) => setLocalSettings(s => ({ ...s, app_sekda_nip: e.target.value }))}
-                      placeholder="19680101 199001 1 002"
-                    />
-                  </div>
+
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Card 5: Tanda Tangan Elektronik (TTE) */}
+            <Card className="animate-fade-in animate-stagger-5 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><PenTool className="h-5 w-5" /> Tanda Tangan Elektronik (TTE)</CardTitle>
+                <CardDescription>Kelola tanda tangan elektronik Anda untuk dokumen resmi</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {loadingSignature ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="h-6 w-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : currentSignature ? (
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-4">
+                      {/* Signature Preview */}
+                      <div className="shrink-0 rounded-xl border border-border/50 bg-white p-3 shadow-sm">
+                        <img
+                          src={currentSignature.imageData}
+                          alt="Tanda Tangan Elektronik"
+                          className="h-16 w-auto max-w-[200px] object-contain"
+                        />
+                      </div>
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+                            <CheckCircle className="h-3 w-3 mr-1" /> Aktif
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Dibuat: {new Date(currentSignature.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        {currentSignature.updatedAt !== currentSignature.createdAt && (
+                          <p className="text-xs text-muted-foreground">
+                            Diperbarui: {new Date(currentSignature.updatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Tanda tangan ini akan ditampilkan pada kolom tanda tangan di dokumen cetak resmi.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSignatureDialogOpen(true)}
+                        className="gap-1.5 rounded-xl border-border/50 hover:border-teal-500/50 hover:text-teal-600"
+                      >
+                        <PenLine className="h-3.5 w-3.5" /> Perbarui Tanda Tangan
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (currentSignature?.id) {
+                            deleteSignature.mutate(currentSignature.id)
+                          }
+                        }}
+                        disabled={deleteSignature.isPending}
+                        className="gap-1.5 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Hapus
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex flex-col items-center justify-center py-6 rounded-xl border-2 border-dashed border-muted-foreground/25 bg-muted/20">
+                      <PenTool className="h-10 w-10 text-muted-foreground/30 mb-2" />
+                      <p className="text-sm text-muted-foreground mb-1">Belum ada tanda tangan elektronik</p>
+                      <p className="text-xs text-muted-foreground/70">Buat tanda tangan untuk digunakan pada dokumen cetak resmi</p>
+                    </div>
+                    <Button
+                      onClick={() => setSignatureDialogOpen(true)}
+                      className="gap-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-lg shadow-teal-500/20"
+                    >
+                      <PenLine className="h-4 w-4" /> Buat Tanda Tangan Elektronik
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -2278,6 +2379,17 @@ export function PengaturanPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* E-Signature Dialog */}
+      <ESignatureDialog
+        open={signatureDialogOpen}
+        onOpenChange={setSignatureDialogOpen}
+        userId={authUser?.id || ''}
+        userName={authUser?.name}
+        onSaveSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['user-signature', authUser?.id] })
+        }}
+      />
     </div>
   )
 }

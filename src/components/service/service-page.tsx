@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -236,6 +236,31 @@ export function ServicePage() {
       return res.json()
     },
   })
+
+  // Fetch Kepala BKAD signature for print documents
+  const [kepalaSignature, setKepalaSignature] = useState<string | null>(null)
+  const kepalaSigFetched = useRef(false)
+  useEffect(() => {
+    if (kepalaSigFetched.current) return
+    kepalaSigFetched.current = true
+    fetch('/api/pengaturan/users')
+      .then(r => r.json())
+      .then(users => {
+        const pimpinanUsers = Array.isArray(users) ? users.filter((u: any) => u.role === 'PIMPINAN') : []
+        const sigCandidates = pimpinanUsers.length > 0 ? pimpinanUsers : (Array.isArray(users) ? users.filter((u: any) => ['SUPER_ADMIN', 'ADMIN'].includes(u.role)) : [])
+        if (sigCandidates.length > 0) {
+          fetch(`/api/signature/verify?userId=${sigCandidates[0].id}`)
+            .then(r => r.json())
+            .then(data => {
+              if (data.hasSignature && data.signature?.imageData) {
+                setKepalaSignature(data.signature.imageData)
+              }
+            })
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // canCreateService check:
   // - Admin/SuperAdmin: always true
@@ -1423,8 +1448,11 @@ export function ServicePage() {
                               `<div class="timeline-item"><div class="timeline-dot ${i === 0 ? 'active' : 'done'}"></div><div><span class="timeline-status status-${h.status}">${h.status}</span><span class="timeline-date">${new Date(h.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span><p class="timeline-desc">${h.keterangan || '-'}</p></div></div>`
                             ).join('')
 
-                            // Build signature HTML
-                            const sigHtml = `<div class="signature-section"><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div><div style="height:60px;"></div><div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div><div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div></div></div>`
+                            // Build signature HTML with QR code for document and vehicle
+                            const docQrData = encodeURIComponent(`${window.location.origin}/api/service/${detail.id}`)
+                            const vehicleInfo = `${detail.vehicle?.nomorPolisi || '-'}|${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}|${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}|${detail.vehicle?.nomorRangka || '-'}|${detail.vehicle?.nomorMesin || '-'}`
+                            const vehicleQrData = encodeURIComponent(vehicleInfo)
+                            const sigHtml = `<div class="signature-section"><div class="sig-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${docQrData}" alt="QR Code Dokumen" /><div class="sig-qr-label">Scan untuk detail service</div></div><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div>${kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div><div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div></div></div><div class="vehicle-qr-section"><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${vehicleQrData}" alt="QR Code Kendaraan" /><div class="vehicle-qr-info"><div class="vehicle-qr-title">QR Code Kendaraan</div><div class="vehicle-qr-detail">${detail.vehicle?.nomorPolisi || '-'} &bull; ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}<br/>${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}${detail.vehicle?.nomorRangka ? ` | Rangka: ${detail.vehicle.nomorRangka}` : ''}${detail.vehicle?.nomorMesin ? ` | Mesin: ${detail.vehicle.nomorMesin}` : ''}</div></div></div>`
 
                             const printHtml = `<!DOCTYPE html>
 <html lang="id">
@@ -1482,11 +1510,19 @@ export function ServicePage() {
   .status-SELESAI { background: #d4edda; color: #155724; }
   .status-PENDING { background: #ffeaa7; color: #6c5ce7; }
   .signature-section { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .sig-qr { width: 140px; text-align: center; }
+  .sig-qr img { width: 120px; height: 120px; border: 1px solid #ccc; border-radius: 4px; }
+  .sig-qr-label { font-size: 7.5pt; color: #555; margin-top: 4px; line-height: 1.3; }
   .sig-block { text-align: center; width: 220px; }
   .sig-date { font-size: 9pt; margin-bottom: 4px; }
   .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
   .sig-title { font-size: 8.5pt; font-weight: bold; }
   .sig-nip { font-size: 8pt; color: #555; }
+  .vehicle-qr-section { margin-top: 14px; padding: 10px; border: 1px solid #e5e5e5; border-radius: 6px; background: #fafafa; display: flex; align-items: center; gap: 12px; }
+  .vehicle-qr-section img { width: 80px; height: 80px; border: 1px solid #ccc; border-radius: 4px; }
+  .vehicle-qr-info { font-size: 8.5pt; }
+  .vehicle-qr-title { font-weight: bold; margin-bottom: 2px; }
+  .vehicle-qr-detail { color: #555; font-size: 7.5pt; line-height: 1.4; }
   .doc-footer { margin-top: 30px; padding-top: 8px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; font-size: 7.5pt; color: #888; }
   @media print { body { margin: 0; padding: 0; background: #fff; } .page { margin: 0; width: 100%; } }
 </style>

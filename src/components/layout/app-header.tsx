@@ -2,7 +2,7 @@
 
 import { useNavigationStore, type PageKey } from '@/store/navigation'
 import { useAuthStore } from '@/store/auth'
-import { Bell, Moon, Sun, Search, Menu, LogOut, User, Settings, ChevronRight } from 'lucide-react'
+import { Bell, Moon, Sun, Search, Menu, LogOut, User, Settings, ChevronRight, ScanLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -15,9 +15,11 @@ import {
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
+import { QrScanner } from '@/components/shared/qr-scanner'
 
 const pageLabels: Record<PageKey, string> = {
   dashboard: 'Dashboard',
@@ -86,6 +88,16 @@ export function AppHeader() {
   const { currentPage, setSidebarOpen } = useNavigationStore()
   const { user, logout } = useAuthStore()
   const { theme, setTheme } = useTheme()
+  const [showQrScanner, setShowQrScanner] = useState(false)
+
+  // Listen for custom event to open QR scanner from dashboard
+  useEffect(() => {
+    function handleOpenQrScanner() {
+      setShowQrScanner(true)
+    }
+    window.addEventListener('open-qr-scanner', handleOpenQrScanner)
+    return () => window.removeEventListener('open-qr-scanner', handleOpenQrScanner)
+  }, [])
 
   const handleLogout = async () => {
     await logout()
@@ -142,6 +154,22 @@ export function AppHeader() {
             )}
           />
         </div>
+
+        {/* QR Scanner Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            'relative h-9 w-9 rounded-xl',
+            'hover:bg-teal-600/10 hover:text-teal-600 dark:hover:text-teal-400 transition-all duration-200'
+          )}
+          onClick={() => setShowQrScanner(true)}
+          title="Scan QR Kendaraan"
+        >
+          <ScanLine className="h-[18px] w-[18px] text-teal-600 dark:text-teal-400" />
+        </Button>
+
+        <QrScanner open={showQrScanner} onOpenChange={setShowQrScanner} />
 
         {/* Notifications - Better styled */}
         <Button

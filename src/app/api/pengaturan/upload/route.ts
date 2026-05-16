@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { storeBlobFile } from '@/lib/blob-store'
+import { storeBlobFile, deleteBlob } from '@/lib/blob-store'
+import { db } from '@/lib/db'
 
 const LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/webp']
 const LOGO_MAX_SIZE = 2 * 1024 * 1024 // 2MB
 
-const FAVICON_ALLOWED_TYPES = ['image/x-icon', 'image/png', 'image/svg+xml']
+const FAVICON_ALLOWED_TYPES = ['image/x-icon', 'image/png', 'image/svg+xml', 'image/webp']
 const FAVICON_MAX_SIZE = 1 * 1024 * 1024 // 1MB
 
 const SETTING_KEY_MAP: Record<string, string> = {
@@ -106,6 +107,44 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Internal server error during file upload.'
     return NextResponse.json(
       { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * DELETE /api/pengaturan/upload?type=logo|favicon
+ * Remove a logo or favicon blob file
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const type = searchParams.get('type')
+
+    if (!type || (type !== 'logo' && type !== 'favicon')) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid type. Must be "logo" or "favicon".' },
+        { status: 400 }
+      )
+    }
+
+    const settingKey = SETTING_KEY_MAP[type]
+
+    // Delete the blob file
+    await deleteBlob('blob', settingKey)
+
+    // Also clear the SystemSetting value
+    await db.systemSetting.upsert({
+      where: { key: settingKey },
+      update: { value: '' },
+      create: { key: settingKey, value: '' },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Delete error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to delete file.' },
       { status: 500 }
     )
   }

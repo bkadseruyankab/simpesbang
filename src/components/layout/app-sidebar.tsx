@@ -97,7 +97,7 @@ function SidebarContent({
   const [serviceBadgeCount, setServiceBadgeCount] = useState(0)
   const [notifBadgeCount, setNotifBadgeCount] = useState(0)
 
-  const { data: appSettings } = useQuery({
+  const { data: appSettings, dataUpdatedAt } = useQuery({
     queryKey: ['app-settings-sidebar'],
     queryFn: async () => {
       const res = await fetch('/api/pengaturan')
@@ -107,7 +107,11 @@ function SidebarContent({
     refetchInterval: 60000, // Auto-refetch every minute
   })
 
-  const appLogo = appSettings?.app_logo || null
+  // Add cache-busting to logo URL so it refreshes after upload
+  const rawLogo = appSettings?.app_logo || null
+  const appLogo = rawLogo
+    ? (rawLogo.includes('?') ? rawLogo : rawLogo + '?t=' + dataUpdatedAt)
+    : null
   const appShortName = appSettings?.app_short_name || 'BKAD'
   const appDesc = appSettings?.app_description || 'Service Kendaraan'
 

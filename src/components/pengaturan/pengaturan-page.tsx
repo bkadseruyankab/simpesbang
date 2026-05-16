@@ -394,16 +394,28 @@ export function PengaturanPage() {
         // Merge: keep any locally-updated values (like just-uploaded logo paths)
         // but update with server values for everything else
         const merged = { ...settings }
-        // Preserve locally-set app_logo and app_favicon if they differ from server
-        // (this handles the race condition between upload and query invalidation)
+        // Preserve locally-set app_logo if it was just uploaded
+        // (cache-busted URL like /api/file/blob/app_logo?t=1234)
         if (prev.app_logo && prev.app_logo !== settings.app_logo) {
-          // If local has a blob URL but server doesn't, keep local
-          if (prev.app_logo.startsWith('/api/file/') && !settings.app_logo?.startsWith('/api/file/')) {
+          const prevBase = prev.app_logo.split('?')[0]
+          const serverBase = (settings.app_logo || '').split('?')[0]
+          // Case 1: local has cache-busted version of the same base URL → keep local
+          if (prevBase === serverBase && prev.app_logo.includes('?t=')) {
+            merged.app_logo = prev.app_logo
+          }
+          // Case 2: local has a blob URL but server doesn't → keep local
+          else if (prev.app_logo.startsWith('/api/file/') && !settings.app_logo?.startsWith('/api/file/')) {
             merged.app_logo = prev.app_logo
           }
         }
+        // Same logic for app_favicon
         if (prev.app_favicon && prev.app_favicon !== settings.app_favicon) {
-          if (prev.app_favicon.startsWith('/api/file/') && !settings.app_favicon?.startsWith('/api/file/')) {
+          const prevBase = prev.app_favicon.split('?')[0]
+          const serverBase = (settings.app_favicon || '').split('?')[0]
+          if (prevBase === serverBase && prev.app_favicon.includes('?t=')) {
+            merged.app_favicon = prev.app_favicon
+          }
+          else if (prev.app_favicon.startsWith('/api/file/') && !settings.app_favicon?.startsWith('/api/file/')) {
             merged.app_favicon = prev.app_favicon
           }
         }
@@ -679,7 +691,18 @@ export function PengaturanPage() {
                   <div className="flex-1 space-y-3">
                     <Label className="text-sm font-medium">Logo Aplikasi</Label>
                     <div className="flex items-center gap-4">
-                      <div className="h-20 w-20 rounded-full border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0">
+                      <div
+                        className="h-20 w-20 rounded-full border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0 cursor-pointer hover:border-primary/50 hover:bg-muted transition-colors"
+                        onClick={() => logoInputRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-primary', 'bg-primary/10') }}
+                        onDragLeave={(e) => { e.currentTarget.classList.remove('border-primary', 'bg-primary/10') }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.remove('border-primary', 'bg-primary/10')
+                          const file = e.dataTransfer.files?.[0]
+                          if (file && file.type.startsWith('image/')) handleFileUpload(file, 'logo')
+                        }}
+                      >
                         {localSettings.app_logo ? (
                           <img
                             key={logoTimestamp}
@@ -687,22 +710,28 @@ export function PengaturanPage() {
                             alt="Logo"
                             className="h-20 w-20 rounded-full object-cover"
                             onError={(e) => {
-                              // If image fails to load, try without cache busting
+                              // If image fails to load, try refreshing with new timestamp
                               const img = e.currentTarget
                               if (!img.src.includes('onerror=1')) {
-                                img.src = localSettings.app_logo?.split('?')[0] + '?onerror=1&t=' + Date.now()
+                                const baseUrl = localSettings.app_logo?.split('?')[0] || ''
+                                if (baseUrl) {
+                                  img.src = baseUrl + '?onerror=1&t=' + Date.now()
+                                } else {
+                                  // Can't recover, hide the broken image
+                                  img.style.display = 'none'
+                                }
                               }
                             }}
                           />
                         ) : (
-                          <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
+                          <ImagePlus className="h-8 w-8 text-muted-foreground/40" />
                         )}
                       </div>
                       <div className="space-y-2">
                         <input
                           ref={logoInputRef}
                           type="file"
-                          accept="image/jpeg,image/png,image/svg+xml"
+                          accept="image/jpeg,image/png,image/svg+xml,image/webp"
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0]
@@ -710,10 +739,31 @@ export function PengaturanPage() {
                             e.target.value = ''
                           }}
                         />
-                        <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
-                          <Upload className="h-4 w-4 mr-1" /> Upload Logo
-                        </Button>
-                        <p className="text-xs text-muted-foreground">JPG, PNG, atau SVG. Maks 2MB.</p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                            <Upload className="h-4 w-4 mr-1" /> Upload Logo
+                          </Button>
+                          {localSettings.app_logo && (
+                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={async () => {
+                              try {
+                                const res = await fetch('/api/pengaturan/upload?type=logo', { method: 'DELETE' })
+                                if (res.ok) {
+                                  setLocalSettings(s => ({ ...s, app_logo: '' }))
+                                  setLogoTimestamp(Date.now())
+                                  queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
+                                  queryClient.invalidateQueries({ queryKey: ['app-settings-sidebar'] })
+                                  toast.success('Logo berhasil dihapus')
+                                }
+                              } catch {
+                                toast.error('Gagal menghapus logo')
+                              }
+                            }}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">JPG, PNG, SVG, atau WebP. Maks 2MB.</p>
+                        <p className="text-xs text-muted-foreground">Klik gambar atau drag & drop</p>
                       </div>
                     </div>
                   </div>
@@ -724,29 +774,45 @@ export function PengaturanPage() {
                   <div className="flex-1 space-y-3">
                     <Label className="text-sm font-medium">Favicon</Label>
                     <div className="flex items-center gap-4">
-                      <div className="h-8 w-8 border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0">
+                      <div
+                        className="h-12 w-12 border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0 cursor-pointer hover:border-primary/50 hover:bg-muted transition-colors rounded"
+                        onClick={() => faviconInputRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-primary', 'bg-primary/10') }}
+                        onDragLeave={(e) => { e.currentTarget.classList.remove('border-primary', 'bg-primary/10') }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.remove('border-primary', 'bg-primary/10')
+                          const file = e.dataTransfer.files?.[0]
+                          if (file && file.type.startsWith('image/')) handleFileUpload(file, 'favicon')
+                        }}
+                      >
                         {localSettings.app_favicon ? (
                           <img
                             key={faviconTimestamp}
                             src={localSettings.app_favicon}
                             alt="Favicon"
-                            className="h-8 w-8 object-cover"
+                            className="h-12 w-12 object-contain"
                             onError={(e) => {
                               const img = e.currentTarget
                               if (!img.src.includes('onerror=1')) {
-                                img.src = localSettings.app_favicon?.split('?')[0] + '?onerror=1&t=' + Date.now()
+                                const baseUrl = localSettings.app_favicon?.split('?')[0] || ''
+                                if (baseUrl) {
+                                  img.src = baseUrl + '?onerror=1&t=' + Date.now()
+                                } else {
+                                  img.style.display = 'none'
+                                }
                               }
                             }}
                           />
                         ) : (
-                          <Globe className="h-4 w-4 text-muted-foreground/40" />
+                          <Globe className="h-5 w-5 text-muted-foreground/40" />
                         )}
                       </div>
                       <div className="space-y-2">
                         <input
                           ref={faviconInputRef}
                           type="file"
-                          accept="image/x-icon,image/png,image/svg+xml"
+                          accept="image/x-icon,image/png,image/svg+xml,image/webp"
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0]
@@ -754,10 +820,31 @@ export function PengaturanPage() {
                             e.target.value = ''
                           }}
                         />
-                        <Button variant="outline" size="sm" onClick={() => faviconInputRef.current?.click()}>
-                          <Upload className="h-4 w-4 mr-1" /> Upload Favicon
-                        </Button>
-                        <p className="text-xs text-muted-foreground">ICO, PNG, atau SVG. Maks 1MB.</p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => faviconInputRef.current?.click()}>
+                            <Upload className="h-4 w-4 mr-1" /> Upload Favicon
+                          </Button>
+                          {localSettings.app_favicon && (
+                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={async () => {
+                              try {
+                                const res = await fetch('/api/pengaturan/upload?type=favicon', { method: 'DELETE' })
+                                if (res.ok) {
+                                  setLocalSettings(s => ({ ...s, app_favicon: '' }))
+                                  setFaviconTimestamp(Date.now())
+                                  queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
+                                  queryClient.invalidateQueries({ queryKey: ['app-settings-sidebar'] })
+                                  toast.success('Favicon berhasil dihapus')
+                                }
+                              } catch {
+                                toast.error('Gagal menghapus favicon')
+                              }
+                            }}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">ICO, PNG, SVG, atau WebP. Maks 1MB.</p>
+                        <p className="text-xs text-muted-foreground">Klik gambar atau drag & drop</p>
                       </div>
                     </div>
                   </div>

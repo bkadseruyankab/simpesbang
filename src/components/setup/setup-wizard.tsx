@@ -313,8 +313,10 @@ function IdentityStep({
       })
       .then(result => {
         if (result.path) {
+          // Add cache-busting so the browser fetches the fresh image
+          const cacheBustedPath = result.path + '?t=' + Date.now()
           onChange({ app_logo: result.path } as any)
-          setLogoPreview(result.path)
+          setLogoPreview(cacheBustedPath)
           toast.success('Logo berhasil diupload')
         }
       })
@@ -340,8 +342,10 @@ function IdentityStep({
       })
       .then(result => {
         if (result.path) {
+          // Add cache-busting so the browser fetches the fresh image
+          const cacheBustedPath = result.path + '?t=' + Date.now()
           onChange({ app_logo: result.path } as any)
-          setLogoPreview(result.path)
+          setLogoPreview(cacheBustedPath)
           toast.success('Logo berhasil diupload')
         }
       })

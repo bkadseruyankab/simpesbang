@@ -14,7 +14,7 @@ Work Log:
   6. Upload API returned `message` field but frontend expected `error` field for error messages
   7. Cache-busting params in URL would be saved to database on settings save
 
-- Fixes applied:
+- Fixes applied (previous session):
   1. Replaced `document.getElementById` with `useRef` for logo and favicon file inputs
   2. Added cache-busting timestamp (`?t=`) to blob URLs after upload for immediate visual refresh
   3. Added `logoTimestamp` and `faviconTimestamp` state with `key` prop on `<img>` for re-render
@@ -30,7 +30,22 @@ Work Log:
   13. Reduced blob file serving cache from 24h to 60s for logo/favicon (blob category)
   14. Added PNG compression format option in compress.ts
 
+- Additional fixes applied (this session):
+  1. Fixed useEffect settings sync race condition: now preserves cache-busted URLs when the base path matches the server value (was overwriting `/api/file/blob/app_logo?t=1234` with `/api/file/blob/app_logo`, causing browser to show cached stale/404 image)
+  2. Added `image/webp` to file input accept attributes (logo + favicon)
+  3. Added `image/webp` to backend FAVICON_ALLOWED_TYPES
+  4. Added cache-busting to sidebar logo URL using `dataUpdatedAt` from React Query
+  5. Added cache-busting to dynamic favicon component
+  6. Added drag-and-drop support for logo/favicon upload areas
+  7. Added delete button for logo/favicon
+  8. Added DELETE endpoint to upload API route for removing logo/favicon
+  9. Made logo preview area clickable (click to open file dialog)
+  10. Improved onError handler to check for valid base URL before retry
+  11. Fixed setup wizard to also use cache-busted URLs after upload
+  12. Changed favicon preview to larger size (h-8 w-8 → h-12 w-12) with object-contain
+
 Stage Summary:
-- All upload tests pass: SVG upload (200), PNG upload (200), file serving (200)
-- Logo upload in Identitas Aplikasi is now functional
-- Files modified: pengaturan-page.tsx, upload/route.ts, blob-store.ts, compress.ts, file/[category]/[id]/route.ts, app-sidebar.tsx
+- All API tests pass: Upload (200), File serve (200), Delete (200)
+- Logo upload now displays correctly immediately after upload
+- Sidebar and favicon also update immediately after logo/favicon upload
+- Files modified: pengaturan-page.tsx, upload/route.ts, app-sidebar.tsx, dynamic-favicon.tsx, setup-wizard.tsx

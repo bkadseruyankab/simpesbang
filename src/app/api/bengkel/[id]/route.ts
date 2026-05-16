@@ -26,6 +26,9 @@ export async function GET(
           orderBy: { createdAt: 'desc' },
           take: 20,
         },
+        documents: {
+          orderBy: { uploadedAt: 'desc' },
+        },
         _count: {
           select: { services: true, users: true }
         }

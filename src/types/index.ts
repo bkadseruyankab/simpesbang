@@ -89,6 +89,18 @@ export interface ServiceItem {
   hargaSatuan: number
   totalHarga: number
   keterangan?: string
+  photos?: ServiceItemPhoto[]
+}
+
+export interface ServiceItemPhoto {
+  id: string
+  itemId: string
+  fileName: string
+  filePath: string
+  fileSize?: number | null
+  fileType?: string | null
+  keterangan?: string | null
+  uploadedAt: string
 }
 
 export interface ServiceDocument {
@@ -138,6 +150,20 @@ export interface Workshop {
   createdAt: string
   updatedAt: string
   services?: Service[]
+  documents?: WorkshopDocument[]
+}
+
+export interface WorkshopDocument {
+  id: string
+  workshopId: string
+  jenisDokumen: string
+  fileName: string
+  filePath: string
+  fileSize?: number
+  fileType?: string
+  keterangan?: string
+  uploadedBy?: string
+  uploadedAt: string
 }
 
 export interface SparePart {
@@ -149,6 +175,8 @@ export interface SparePart {
   stok: number
   keterangan?: string
   isActive: boolean
+  bengkelId: string
+  bengkel?: Workshop
   createdAt: string
   updatedAt: string
 }

@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const jenisKendaraan = searchParams.get('jenisKendaraan')
     const statusService = searchParams.get('statusService')
     const jenisService = searchParams.get('jenisService')
+    const skpdBidang = searchParams.get('skpdBidang')
 
     const where: any = { isDeleted: false }
 
@@ -58,13 +59,18 @@ export async function GET(request: NextRequest) {
     if (jenisKendaraan) {
       where.vehicle = { jenisKendaraan }
     }
+    if (skpdBidang) {
+      where.vehicle = { ...(where.vehicle || {}), skpdBidang: { contains: skpdBidang } }
+    }
 
     const services = await db.service.findMany({
       where,
       include: {
         vehicle: true,
         bengkel: true,
-        items: true,
+        items: {
+          include: { photos: true },
+        },
         spareParts: {
           include: { sparePart: true },
         },
@@ -95,7 +101,7 @@ export async function GET(request: NextRequest) {
     // Bengkel distribution
     const bengkelDistribution: Record<string, { name: string; count: number; total: number }> = {}
     services.forEach(s => {
-      const name = s.bengkel.namaBengkel
+      const name = s.bengkel?.namaBengkel || 'Tidak Ada Bengkel'
       if (!bengkelDistribution[s.bengkelId]) {
         bengkelDistribution[s.bengkelId] = { name, count: 0, total: 0 }
       }
@@ -115,7 +121,7 @@ export async function GET(request: NextRequest) {
     // Vehicle type breakdown
     const vehicleTypeBreakdown: Record<string, { count: number; total: number }> = {}
     services.forEach(s => {
-      const type = s.vehicle.jenisKendaraan
+      const type = s.vehicle?.jenisKendaraan || 'TIDAK_DIKETAHUI'
       if (!vehicleTypeBreakdown[type]) vehicleTypeBreakdown[type] = { count: 0, total: 0 }
       vehicleTypeBreakdown[type].count++
       vehicleTypeBreakdown[type].total += s.totalBiaya
@@ -136,7 +142,7 @@ export async function GET(request: NextRequest) {
         realisasi: budgets.filter(b => b.jenisKendaraan === 'RODA_2').reduce((sum, b) => sum + b.realisasi, 0),
         sisaAnggaran: 0,
         persentase: 0,
-        serviceCount: services.filter(s => s.vehicle.jenisKendaraan === 'RODA_2').length,
+        serviceCount: services.filter(s => s.vehicle?.jenisKendaraan === 'RODA_2').length,
         vehicleCount: budgets.filter(b => b.jenisKendaraan === 'RODA_2').length,
       },
       RODA_4: {
@@ -144,7 +150,7 @@ export async function GET(request: NextRequest) {
         realisasi: budgets.filter(b => b.jenisKendaraan === 'RODA_4').reduce((sum, b) => sum + b.realisasi, 0),
         sisaAnggaran: 0,
         persentase: 0,
-        serviceCount: services.filter(s => s.vehicle.jenisKendaraan === 'RODA_4').length,
+        serviceCount: services.filter(s => s.vehicle?.jenisKendaraan === 'RODA_4').length,
         vehicleCount: budgets.filter(b => b.jenisKendaraan === 'RODA_4').length,
       },
     }
@@ -162,7 +168,7 @@ export async function GET(request: NextRequest) {
     services.forEach(s => {
       const monthKey = new Date(s.tanggalService).toISOString().slice(0, 7)
       if (!monthlyByType[monthKey]) monthlyByType[monthKey] = { month: monthKey, roda2: 0, roda4: 0 }
-      if (s.vehicle.jenisKendaraan === 'RODA_2') {
+      if (s.vehicle?.jenisKendaraan === 'RODA_2') {
         monthlyByType[monthKey].roda2 += s.totalBiaya
       } else {
         monthlyByType[monthKey].roda4 += s.totalBiaya
@@ -193,7 +199,7 @@ export async function GET(request: NextRequest) {
         budgetByType,
         monthlyByType: Object.values(monthlyByType).sort((a, b) => a.month.localeCompare(b.month)),
       },
-      filters: { type, year, month, dateFrom, dateTo, vehicleId, bengkelId, jenisKendaraan, statusService, jenisService },
+      filters: { type, year, month, dateFrom, dateTo, vehicleId, bengkelId, jenisKendaraan, statusService, jenisService, skpdBidang },
     })
   } catch (error) {
     console.error('Error generating report:', error)

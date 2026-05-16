@@ -10,7 +10,7 @@ import {
   XCircle, RefreshCw, ChevronLeft, ChevronRight, FileText,
   AlertTriangle, Info, X, Wallet, CalendarIcon, ArrowUpDown,
   Upload, Download, Image as ImageIcon, CalendarDays, History,
-  Car, Gauge, Send, ClipboardCheck
+  Car, Gauge, Send, ClipboardCheck, ImagePlus, ZoomIn, Printer
 } from 'lucide-react'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -46,7 +46,7 @@ import { format } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
 import { toast } from '@/hooks/use-toast'
 import { MultiUpload } from '@/components/shared/multi-upload'
-import type { Service, ServiceItem, ServiceDocument, BudgetValidation, StatusService, JenisService, Prioritas } from '@/types'
+import type { Service, ServiceItem, ServiceItemPhoto, ServiceDocument, BudgetValidation, StatusService, JenisService, Prioritas } from '@/types'
 import { useAuthStore } from '@/store/auth'
 
 // ========== Types ==========
@@ -72,14 +72,14 @@ interface ServiceItemForm {
 
 // ========== Constants ==========
 const STATUS_COLORS: Record<StatusService, string> = {
-  DIAJUKAN: 'bg-blue-100 text-blue-800 border-blue-200',
-  PENGAJUAN: 'bg-cyan-100 text-cyan-800 border-cyan-200',
-  DISETUJUI: 'bg-green-100 text-green-800 border-green-200',
-  DITOLAK: 'bg-red-100 text-red-800 border-red-200',
-  DIPROSES: 'bg-orange-100 text-orange-800 border-orange-200',
-  PENDING: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  SELESAI: 'bg-purple-100 text-purple-800 border-purple-200',
-  MENUNGGU_PERSETUJUAN: 'bg-amber-100 text-amber-800 border-amber-200',
+  DIAJUKAN: 'bg-blue-100 text-blue-800 border-blue-200 shadow-sm shadow-blue-200/50',
+  PENGAJUAN: 'bg-cyan-100 text-cyan-800 border-cyan-200 shadow-sm shadow-cyan-200/50',
+  DISETUJUI: 'bg-green-100 text-green-800 border-green-200 shadow-sm shadow-green-200/50',
+  DITOLAK: 'bg-red-100 text-red-800 border-red-200 shadow-sm shadow-red-200/50',
+  DIPROSES: 'bg-orange-100 text-orange-800 border-orange-200 shadow-sm shadow-orange-200/50',
+  PENDING: 'bg-yellow-100 text-yellow-800 border-yellow-200 shadow-sm shadow-yellow-200/50',
+  SELESAI: 'bg-purple-100 text-purple-800 border-purple-200 shadow-sm shadow-purple-200/50',
+  MENUNGGU_PERSETUJUAN: 'bg-amber-100 text-amber-800 border-amber-200 shadow-sm shadow-amber-200/50',
 }
 
 const STATUS_LABELS: Record<StatusService, string> = {
@@ -178,6 +178,15 @@ export function ServicePage() {
   const [bengkelEditService, setBengkelEditService] = useState<Service | null>(null)
   const [showBengkelProgress, setShowBengkelProgress] = useState(false)
   const [bengkelProgressService, setBengkelProgressService] = useState<Service | null>(null)
+
+  // Photo upload states
+  const [itemPhotoDialogOpen, setItemPhotoDialogOpen] = useState(false)
+  const [selectedItemForPhotos, setSelectedItemForPhotos] = useState<ServiceItem | null>(null)
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
+  const [photoKeterangan, setPhotoKeterangan] = useState('')
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false)
+  const [photoViewerSrc, setPhotoViewerSrc] = useState('')
 
   // Build query params
   const queryParams = useMemo(() => {
@@ -473,6 +482,53 @@ export function ServicePage() {
     },
   })
 
+  // Upload Item Photos mutation
+  const uploadItemPhotosMutation = useMutation({
+    mutationFn: async ({ serviceId, itemId, files, keterangan }: { serviceId: string; itemId: string; files: File[]; keterangan: string }) => {
+      const formData = new FormData()
+      files.forEach((f) => formData.append('files', f))
+      if (keterangan) formData.append('keterangan', keterangan)
+      const res = await fetch(`/api/service/${serviceId}/items/${itemId}/photos`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Gagal mengupload foto') }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['service-detail', detailService?.id] })
+      queryClient.invalidateQueries({ queryKey: ['services'] })
+      toast({ title: 'Berhasil', description: 'Foto berhasil diupload' })
+      setItemPhotoDialogOpen(false)
+      setSelectedItemForPhotos(null)
+      setPhotoFiles([])
+      setPhotoPreviews([])
+      setPhotoKeterangan('')
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Gagal', description: error.message, variant: 'destructive' })
+    },
+  })
+
+  // Delete Item Photo mutation
+  const deleteItemPhotoMutation = useMutation({
+    mutationFn: async ({ serviceId, itemId, photoId }: { serviceId: string; itemId: string; photoId: string }) => {
+      const res = await fetch(`/api/service/${serviceId}/items/${itemId}/photos/${photoId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Gagal menghapus foto') }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['service-detail', detailService?.id] })
+      queryClient.invalidateQueries({ queryKey: ['services'] })
+      toast({ title: 'Berhasil', description: 'Foto berhasil dihapus' })
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Gagal', description: error.message, variant: 'destructive' })
+    },
+  })
+
   // Detail query
   const { data: detailData, isLoading: detailLoading } = useQuery({
     queryKey: ['service-detail', detailService?.id],
@@ -526,6 +582,55 @@ export function ServicePage() {
   const handleBengkelUploadNota = (service: Service) => {
     setDetailService(service)
     setShowUploadNota(true)
+  }
+
+  const handleOpenPhotoUpload = (item: ServiceItem) => {
+    setSelectedItemForPhotos(item)
+    setPhotoFiles([])
+    setPhotoPreviews([])
+    setPhotoKeterangan('')
+    setItemPhotoDialogOpen(true)
+  }
+
+  const handlePhotoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || [])
+    if (selected.length === 0) return
+    const newFiles = [...photoFiles, ...selected].slice(0, 10)
+    setPhotoFiles(newFiles)
+    // Generate previews
+    const newPreviews: string[] = []
+    newFiles.forEach((file) => {
+      const url = URL.createObjectURL(file)
+      newPreviews.push(url)
+    })
+    setPhotoPreviews(newPreviews)
+  }
+
+  const handleRemovePhotoFile = (index: number) => {
+    const newFiles = photoFiles.filter((_, i) => i !== index)
+    const newPreviews = photoPreviews.filter((_, i) => i !== index)
+    if (photoPreviews[index]) URL.revokeObjectURL(photoPreviews[index])
+    setPhotoFiles(newFiles)
+    setPhotoPreviews(newPreviews)
+  }
+
+  const handleUploadPhotos = () => {
+    if (!detailService?.id || !selectedItemForPhotos || photoFiles.length === 0) return
+    uploadItemPhotosMutation.mutate({
+      serviceId: detailService.id,
+      itemId: selectedItemForPhotos.id,
+      files: photoFiles,
+      keterangan: photoKeterangan,
+    })
+  }
+
+  const handleDeletePhoto = (photo: ServiceItemPhoto) => {
+    if (!detailService?.id) return
+    deleteItemPhotoMutation.mutate({
+      serviceId: detailService.id,
+      itemId: photo.itemId,
+      photoId: photo.id,
+    })
   }
 
   const handleSubmit = (data: ServiceFormData) => {
@@ -586,38 +691,38 @@ export function ServicePage() {
     <div className="space-y-4">
       {/* Role Indicator Banner */}
       {isBengkel && (
-        <div className="flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 p-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
-            <Wrench className="h-4 w-4 text-orange-600" />
+        <div className="animate-slide-up flex items-center gap-3 rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50/50 dark:from-orange-950/30 dark:to-amber-950/20 p-3 shadow-sm">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/40">
+            <Wrench className="h-4 w-4 text-orange-600 dark:text-orange-400" />
           </div>
           <div>
-            <p className="text-sm font-medium text-orange-800">Mode Bengkel</p>
-            <p className="text-xs text-orange-600">Anda hanya dapat melihat dan mengelola service yang ditugaskan ke bengkel Anda</p>
+            <p className="text-sm font-medium text-orange-800 dark:text-orange-300">Mode Bengkel</p>
+            <p className="text-xs text-orange-600 dark:text-orange-400">Anda hanya dapat melihat dan mengelola service yang ditugaskan ke bengkel Anda</p>
           </div>
         </div>
       )}
       {isPimpinan && (
-        <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100">
-            <Eye className="h-4 w-4 text-emerald-600" />
+        <div className="animate-slide-up flex items-center gap-3 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 p-3 shadow-sm">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
+            <Eye className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
-            <p className="text-sm font-medium text-emerald-800">Mode Pimpinan</p>
-            <p className="text-xs text-emerald-600">Anda hanya dapat melihat data service sebagai baca saja</p>
+            <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Mode Pimpinan</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">Anda hanya dapat melihat data service sebagai baca saja</p>
           </div>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="animate-slide-up flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Wrench className="h-5 w-5 text-primary" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500/10 to-emerald-500/10 border border-teal-500/20">
+            <Wrench className="h-5 w-5 text-teal-600 dark:text-teal-400" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
               Service Kendaraan
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
                 {pagination.total} data
               </Badge>
             </h1>
@@ -627,7 +732,7 @@ export function ServicePage() {
           </div>
         </div>
         {canCreateService && !isPimpinan && (
-          <Button onClick={handleAddNew} className="gap-2">
+          <Button onClick={handleAddNew} className="gap-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-500/20 active:scale-[0.98] transition-all">
             <Plus className="h-4 w-4" />
             Tambah Service
           </Button>
@@ -635,14 +740,15 @@ export function ServicePage() {
       </div>
 
       {/* Search & Filters */}
-      <Card>
+      <div className="animate-slide-up animate-stagger-1">
+      <Card className="shadow-sm border border-border/50 bg-background/80 backdrop-blur-md">
         <CardContent className="p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Cari nomor service, nopol, bengkel..."
-                className="pl-9"
+                className="pl-9 bg-background/60 border-border/50 focus:border-teal-500/50 focus:ring-teal-500/20"
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
               />
@@ -650,7 +756,7 @@ export function ServicePage() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-2"
+              className="gap-2 rounded-lg border-border/50 hover:border-teal-500/50 hover:text-teal-600"
               onClick={() => setShowFilters(!showFilters)}
             >
               <Filter className="h-4 w-4" />
@@ -718,23 +824,33 @@ export function ServicePage() {
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Data Table */}
-      <Card>
+      <Card className="animate-slide-up animate-stagger-2 shadow-sm border border-border/50 overflow-hidden">
         <CardContent className="p-0">
           {servicesLoading ? (
             <div className="p-6 space-y-3">
               {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-4 w-8" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-32 flex-1" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
               ))}
             </div>
           ) : services.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <Wrench className="h-12 w-12 mb-3 opacity-30" />
-              <p className="text-sm">Belum ada data service</p>
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground animate-fade-in">
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-muted/30 mb-4">
+                <Wrench className="h-10 w-10 opacity-30" />
+              </div>
+              <p className="text-lg font-medium">Belum ada data service</p>
+              <p className="text-sm mt-1">Tambahkan service baru untuk kendaraan operasional</p>
               {canCreateService && !isPimpinan && (
-                <Button variant="outline" size="sm" className="mt-3" onClick={handleAddNew}>
-                  <Plus className="h-4 w-4 mr-1" /> Tambah Service
+                <Button variant="outline" size="sm" className="mt-4 gap-2 rounded-lg" onClick={handleAddNew}>
+                  <Plus className="h-4 w-4" /> Tambah Service
                 </Button>
               )}
             </div>
@@ -743,17 +859,17 @@ export function ServicePage() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10 text-center">No</TableHead>
-                      <TableHead>Nomor Service</TableHead>
-                      <TableHead>Tanggal</TableHead>
-                      <TableHead>Kendaraan</TableHead>
-                      <TableHead>Bengkel</TableHead>
-                      <TableHead>Jenis</TableHead>
-                      <TableHead className="text-right">Total Biaya</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Progress</TableHead>
-                      <TableHead className="text-center">Aksi</TableHead>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/50">
+                      <TableHead className="w-10 text-center font-semibold">No</TableHead>
+                      <TableHead className="font-semibold">Nomor Service</TableHead>
+                      <TableHead className="font-semibold">Tanggal</TableHead>
+                      <TableHead className="font-semibold">Kendaraan</TableHead>
+                      <TableHead className="font-semibold">Bengkel</TableHead>
+                      <TableHead className="font-semibold">Jenis</TableHead>
+                      <TableHead className="text-right font-semibold">Total Biaya</TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold">Progress</TableHead>
+                      <TableHead className="text-center font-semibold">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -762,7 +878,7 @@ export function ServicePage() {
                       const adminActions = isAdmin ? getAdminActions(service.statusService as StatusService) : null
 
                       return (
-                        <TableRow key={service.id} className="hover:bg-muted/50">
+                        <TableRow key={service.id} className={`transition-all duration-200 hover:bg-teal-50/50 dark:hover:bg-teal-950/20 hover:shadow-sm ${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'}`}>
                           <TableCell className="text-center text-sm text-muted-foreground">
                             {(page - 1) * limit + idx + 1}
                           </TableCell>
@@ -783,7 +899,7 @@ export function ServicePage() {
                           </TableCell>
                           <TableCell className="text-sm">{service.bengkel?.namaBengkel}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-xs">{service.jenisService}</Badge>
+                            <Badge variant="outline" className="text-xs shadow-sm">{service.jenisService}</Badge>
                           </TableCell>
                           <TableCell className="text-right text-sm font-medium">
                             {formatRupiah(service.totalBiaya)}
@@ -795,14 +911,25 @@ export function ServicePage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2 min-w-[100px]">
-                              <Progress value={service.progress} className="h-2 flex-1" />
-                              <span className="text-xs text-muted-foreground w-8 text-right">{service.progress}%</span>
+                              <div className="relative flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${
+                                    service.progress >= 100
+                                      ? 'bg-gradient-to-r from-purple-400 to-purple-500'
+                                      : service.progress > 50
+                                      ? 'bg-gradient-to-r from-teal-400 to-emerald-500'
+                                      : 'bg-gradient-to-r from-amber-400 to-amber-500'
+                                  }`}
+                                  style={{ width: service.progress + '%' }}
+                                />
+                              </div>
+                              <span className="text-xs font-medium text-muted-foreground w-8 text-right">{service.progress}%</span>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-center gap-1">
                               {/* Detail button - visible to all roles */}
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDetail(service)} title="Detail">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-teal-50 hover:text-teal-600 dark:hover:bg-teal-950/30 dark:hover:text-teal-400 transition-colors" onClick={() => handleDetail(service)} title="Detail">
                                 <Eye className="h-4 w-4" />
                               </Button>
 
@@ -811,25 +938,25 @@ export function ServicePage() {
                                 <>
                                   {/* Edit button - for DIAJUKAN/DITOLAK (opens BengkelEditDialog to add items & submit pengajuan) */}
                                   {bengkelActions.edit && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleBengkelEdit(service)} title="Edit & Kirim Pengajuan">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 dark:hover:text-amber-400 transition-colors" onClick={() => handleBengkelEdit(service)} title="Edit & Kirim Pengajuan">
                                       <Edit className="h-4 w-4" />
                                     </Button>
                                   )}
                                   {/* Upload Nota */}
                                   {bengkelActions.uploadNota && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleBengkelUploadNota(service)} title="Upload Nota">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/30 dark:hover:text-blue-400 transition-colors" onClick={() => handleBengkelUploadNota(service)} title="Upload Nota">
                                       <Upload className="h-4 w-4" />
                                     </Button>
                                   )}
                                   {/* Update Progress - for DISETUJUI/DIPROSES */}
                                   {bengkelActions.updateProgress && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleBengkelProgress(service)} title="Update Progress">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30 dark:hover:text-orange-400 transition-colors" onClick={() => handleBengkelProgress(service)} title="Update Progress">
                                       <RefreshCw className="h-4 w-4" />
                                     </Button>
                                   )}
                                   {/* Tandai Selesai - for DIPROSES */}
                                   {bengkelActions.tandaiSelesai && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleBengkelProgress(service)} title="Tandai Selesai">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400 transition-colors" onClick={() => handleBengkelProgress(service)} title="Tandai Selesai">
                                       <CheckCircle className="h-4 w-4" />
                                     </Button>
                                   )}
@@ -843,19 +970,19 @@ export function ServicePage() {
                                 <>
                                   {/* Edit - for DIAJUKAN/DITOLAK/DISETUJUI */}
                                   {adminActions.edit && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(service)} title="Edit">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 dark:hover:text-amber-400 transition-colors" onClick={() => handleEdit(service)} title="Edit">
                                       <Edit className="h-4 w-4" />
                                     </Button>
                                   )}
                                   {/* Approve/Reject - for DIAJUKAN/PENGAJUAN/MENUNGGU_PERSETUJUAN */}
                                   {adminActions.approveReject && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" onClick={() => handleApproveReject(service)} title="Setujui/Tolak">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400 transition-colors" onClick={() => handleApproveReject(service)} title="Setujui/Tolak">
                                       <CheckCircle className="h-4 w-4" />
                                     </Button>
                                   )}
                                   {/* Update Progress - for DISETUJUI/DIPROSES */}
                                   {adminActions.updateProgress && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleProgress(service)} title="Update Progress">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/30 dark:hover:text-orange-400 transition-colors" onClick={() => handleProgress(service)} title="Update Progress">
                                       <RefreshCw className="h-4 w-4" />
                                     </Button>
                                   )}
@@ -876,16 +1003,16 @@ export function ServicePage() {
 
               {/* Pagination */}
               {pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between border-t px-4 py-3">
+                <div className="flex items-center justify-between border-t border-border/50 px-4 py-3 bg-muted/10">
                   <p className="text-sm text-muted-foreground">
-                    Menampilkan {(page - 1) * limit + 1} - {Math.min(page * limit, pagination.total)} dari {pagination.total} data
+                    Menampilkan <span className="font-medium text-foreground">{(page - 1) * limit + 1}</span> - <span className="font-medium text-foreground">{Math.min(page * limit, pagination.total)}</span> dari <span className="font-medium text-foreground">{pagination.total}</span> data
                   </p>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded-lg">
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <span className="text-sm font-medium">{page} / {pagination.totalPages}</span>
-                    <Button variant="outline" size="sm" disabled={page >= pagination.totalPages} onClick={() => setPage(page + 1)}>
+                    <span className="text-sm font-medium px-2">{page} / {pagination.totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={page >= pagination.totalPages} onClick={() => setPage(page + 1)} className="rounded-lg">
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -953,6 +1080,7 @@ export function ServicePage() {
       {/* Detail Sheet - Modernized */}
       <Sheet open={showDetail} onOpenChange={setShowDetail}>
         <SheetContent className="sm:max-w-xl w-full overflow-y-auto p-0">
+          <SheetTitle className="sr-only">Detail Service</SheetTitle>
           {detailLoading ? (
             <div className="p-6 space-y-3">
               <Skeleton className="h-32 w-full" />
@@ -961,10 +1089,14 @@ export function ServicePage() {
           ) : detail ? (
             <div className="flex flex-col">
               {/* Gradient Header Banner */}
-              <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
+              <div className="bg-gradient-to-br from-slate-800 via-slate-800 to-teal-900 px-6 py-5 text-white relative overflow-hidden animate-fade-in">
+                {/* Decorative blur elements */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full -translate-y-8 translate-x-8 blur-2xl" />
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/10 rounded-full translate-y-6 -translate-x-6 blur-xl" />
+                <div className="relative z-10">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm border border-white/10">
                       <Wrench className="h-5 w-5" />
                     </div>
                     <div>
@@ -984,33 +1116,45 @@ export function ServicePage() {
                   </div>
                   <div className="h-2.5 rounded-full bg-white/20 overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        detail.progress >= 100
+                          ? 'bg-gradient-to-r from-purple-400 to-purple-500'
+                          : detail.progress > 50
+                          ? 'bg-gradient-to-r from-teal-400 to-emerald-500'
+                          : 'bg-gradient-to-r from-amber-400 to-amber-500'
+                      }`}
                       style={{ width: detail.progress + '%' }}
                     />
                   </div>
+                </div>
                 </div>
               </div>
 
               <div className="p-6 space-y-6">
                 {/* General Info Card */}
-                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                <Card className="animate-slide-up animate-stagger-1 shadow-sm border border-border/50 bg-gradient-to-br from-white to-slate-50/50 dark:from-card dark:to-slate-900/30">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      <div className="h-1 w-4 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500" />
+                      <FileText className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                       Informasi Umum
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div className="flex items-start gap-2">
-                        <CalendarIcon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 mt-0.5 shrink-0">
+                          <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Tanggal Service</p>
                           <p className="font-semibold">{formatDate(detail.tanggalService)}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-2">
-                        <Car className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 mt-0.5 shrink-0">
+                          <Car className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Kendaraan</p>
                           <p className="font-semibold">{detail.vehicle?.nomorPolisi}</p>
@@ -1018,28 +1162,36 @@ export function ServicePage() {
                         </div>
                       </div>
                       <div className="flex items-start gap-2">
-                        <Wrench className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 mt-0.5 shrink-0">
+                          <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Bengkel</p>
                           <p className="font-semibold">{detail.bengkel?.namaBengkel}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 mt-0.5 shrink-0">
+                          <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Jenis / Prioritas</p>
                           <p className="font-semibold">{detail.jenisService} • {detail.prioritas}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-2">
-                        <Gauge className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 mt-0.5 shrink-0">
+                          <Gauge className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Kilometer</p>
                           <p className="font-semibold">{detail.kilometerService?.toLocaleString('id-ID')} km</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-2">
-                        <CalendarDays className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 mt-0.5 shrink-0">
+                          <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Est. Lama Perbaikan</p>
                           <p className="font-semibold">{detail.estimasiLamaPerbaikan ? detail.estimasiLamaPerbaikan + ' hari' : '-'}</p>
@@ -1047,7 +1199,7 @@ export function ServicePage() {
                       </div>
                     </div>
                     {detail.keterangan && (
-                      <div className="mt-3 p-2.5 rounded-lg bg-muted/50 text-sm">
+                      <div className="mt-3 p-2.5 rounded-lg bg-muted/50 dark:bg-muted/20 text-sm">
                         <p className="text-xs text-muted-foreground mb-0.5">Keterangan</p>
                         <p>{detail.keterangan}</p>
                       </div>
@@ -1056,46 +1208,130 @@ export function ServicePage() {
                 </Card>
 
                 {/* Items Table - Polished */}
-                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                <Card className="animate-slide-up animate-stagger-2 shadow-sm border border-border/50 bg-gradient-to-br from-white to-slate-50/50 dark:from-card dark:to-slate-900/30">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <div className="h-1 w-4 rounded-full bg-slate-700" />
+                      <div className="h-1 w-4 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500" />
+                      <ClipboardCheck className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                       Item Service
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     {detail.items && detail.items.length > 0 ? (
-                      <div className="rounded-lg border overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-slate-50">
-                              <TableHead className="text-xs">Item</TableHead>
-                              <TableHead className="text-xs text-center">Qty</TableHead>
-                              <TableHead className="text-xs text-right">Harga</TableHead>
-                              <TableHead className="text-xs text-right">Total</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {detail.items.map((item: ServiceItem, idx: number) => (
-                              <TableRow key={item.id} className={idx % 2 === 1 ? 'bg-slate-50/50' : ''}>
-                                <TableCell className="text-sm">
-                                  {item.itemName}
-                                  {item.keterangan && <p className="text-xs text-muted-foreground">{item.keterangan}</p>}
-                                </TableCell>
-                                <TableCell className="text-sm text-center">{item.quantity}</TableCell>
-                                <TableCell className="text-sm text-right">{formatRupiah(item.hargaSatuan)}</TableCell>
-                                <TableCell className="text-sm text-right font-medium">{formatRupiah(item.totalHarga)}</TableCell>
+                      <div className="space-y-3">
+                        <div className="rounded-lg border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/50">
+                                <TableHead className="text-xs font-semibold">Item</TableHead>
+                                <TableHead className="text-xs font-semibold text-center">Qty</TableHead>
+                                <TableHead className="text-xs font-semibold text-right">Harga</TableHead>
+                                <TableHead className="text-xs font-semibold text-right">Total</TableHead>
+                                <TableHead className="text-xs font-semibold text-center">Foto</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        {/* Total Summary */}
-                        <div className="border-t p-3 bg-gradient-to-r from-slate-50 to-slate-100">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-muted-foreground">Total</span>
-                            <span className="text-lg font-bold">{formatRupiah(detail.totalBiaya)}</span>
+                            </TableHeader>
+                            <TableBody>
+                              {detail.items.map((item: ServiceItem, idx: number) => {
+                                const itemPhotos = (item.photos || []) as ServiceItemPhoto[]
+                                return (
+                                  <TableRow key={item.id} className={`transition-colors hover:bg-teal-50/50 dark:hover:bg-teal-950/20 ${idx % 2 === 1 ? 'bg-muted/20' : ''}`}>
+                                    <TableCell className="text-sm">
+                                      {item.itemName}
+                                      {item.keterangan && <p className="text-xs text-muted-foreground">{item.keterangan}</p>}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-center">{item.quantity}</TableCell>
+                                    <TableCell className="text-sm text-right">{formatRupiah(item.hargaSatuan)}</TableCell>
+                                    <TableCell className="text-sm text-right font-medium">{formatRupiah(item.totalHarga)}</TableCell>
+                                    <TableCell className="text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        {itemPhotos.length > 0 && (
+                                          <Badge variant="secondary" className="text-[10px] h-5 px-1.5 gap-0.5">
+                                            <ImageIcon className="h-3 w-3" />
+                                            {itemPhotos.length}
+                                          </Badge>
+                                        )}
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                          onClick={() => handleOpenPhotoUpload(item)}
+                                          title="Upload Foto"
+                                        >
+                                          <ImagePlus className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                          {/* Total Summary */}
+                          <div className="border-t p-3 bg-gradient-to-r from-slate-50 to-slate-100">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-semibold text-muted-foreground">Total</span>
+                              <span className="text-lg font-bold">{formatRupiah(detail.totalBiaya)}</span>
+                            </div>
                           </div>
                         </div>
+
+                        {/* Photo Gallery per Item */}
+                        {detail.items.some((item: ServiceItem) => (item.photos || []).length > 0) && (
+                          <div className="space-y-3">
+                            {detail.items.filter((item: ServiceItem) => (item.photos || []).length > 0).map((item: ServiceItem) => {
+                              const photos = (item.photos || []) as ServiceItemPhoto[]
+                              return (
+                                <div key={item.id} className="rounded-lg border p-3 bg-slate-50/30">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">{item.itemName}</span>
+                                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                                      {photos.length} foto
+                                    </Badge>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {photos.map((photo: ServiceItemPhoto) => (
+                                      <div key={photo.id} className="relative group">
+                                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border overflow-hidden bg-white cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                                          onClick={() => { setPhotoViewerSrc(photo.filePath); setPhotoViewerOpen(true) }}
+                                        >
+                                          <img
+                                            src={photo.filePath}
+                                            alt={photo.fileName}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                        {/* Delete overlay */}
+                                        <Button
+                                          variant="destructive"
+                                          size="icon"
+                                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                          onClick={() => handleDeletePhoto(photo)}
+                                          disabled={deleteItemPhotoMutation.isPending}
+                                          title="Hapus foto"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                        {/* Zoom overlay */}
+                                        <div
+                                          className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                          onClick={() => { setPhotoViewerSrc(photo.filePath); setPhotoViewerOpen(true) }}
+                                        >
+                                          <ZoomIn className="h-4 w-4 text-white" />
+                                        </div>
+                                        {photo.keterangan && (
+                                          <p className="text-[10px] text-muted-foreground mt-0.5 w-16 sm:w-20 truncate" title={photo.keterangan}>
+                                            {photo.keterangan}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">Tidak ada item service</p>
@@ -1105,10 +1341,11 @@ export function ServicePage() {
 
                 {/* Approval Info */}
                 {(detail.approvedBy || detail.rejectedReason) && (
-                  <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <Card className="animate-slide-up animate-stagger-3 shadow-sm border border-border/50 bg-gradient-to-br from-white to-slate-50/50 dark:from-card dark:to-slate-900/30">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <div className="h-1 w-4 rounded-full bg-slate-700" />
+                        <div className="h-1 w-4 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500" />
+                        <CheckCircle className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                         Persetujuan
                       </CardTitle>
                     </CardHeader>
@@ -1131,10 +1368,11 @@ export function ServicePage() {
 
                 {/* Catatan Bengkel */}
                 {detail.catatanBengkel && (
-                  <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <Card className="animate-slide-up animate-stagger-3 shadow-sm border border-border/50 bg-gradient-to-br from-white to-slate-50/50 dark:from-card dark:to-slate-900/30">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <div className="h-1 w-4 rounded-full bg-slate-700" />
+                        <div className="h-1 w-4 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500" />
+                        <Wrench className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                         Catatan Bengkel
                       </CardTitle>
                     </CardHeader>
@@ -1146,24 +1384,171 @@ export function ServicePage() {
 
                 {/* History - Timeline Style */}
                 {detail.history && detail.history.length > 0 && (
-                  <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                  <Card className="animate-slide-up animate-stagger-4 shadow-sm border border-border/50 bg-gradient-to-br from-white to-slate-50/50 dark:from-card dark:to-slate-900/30">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <div className="h-1 w-4 rounded-full bg-slate-700" />
-                        <History className="h-4 w-4" />
-                        Riwayat
-                      </CardTitle>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <div className="h-1 w-4 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500" />
+                          <History className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                          Riwayat
+                        </CardTitle>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 rounded-lg border-border/50 hover:border-teal-500/50 hover:text-teal-600"
+                          onClick={() => {
+                            const settings = (settingsData || {}) as Record<string, string>
+                            const printItems = Array.isArray(detail.items) ? detail.items : []
+                            const itemsSubtotal = printItems.reduce((sum: number, item: any) => sum + (item.totalHarga || 0), 0)
+                            const printDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+                            const docNumber = `${String(Math.floor(Math.random() * 900) + 100)}/BKAD/TIMELINE/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`
+
+                            // Build KOP SURAT HTML
+                            const kopLogoHtml = settings.app_logo
+                              ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:50%;object-fit:contain;" />`
+                              : `<div class="kop-logo-inner">LOGO</div>`
+                            const kopHtml = `<div class="kop-surat"><div class="kop-content"><div class="kop-logo">${kopLogoHtml}</div><div class="kop-text"><div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div><div class="kop-line2">${settings.app_kop_line2 || 'BADAN KEUANGAN DAN ASET DAERAH'}</div><div class="kop-line3">${settings.app_kop_line3 || 'UNIT LAYANAN PENGADAAN'}</div><div class="kop-address">${settings.app_address || 'Jl. Merdeka No. 1, Kota Selatan | Telp. (021) 123-4567 | Email: bkad@pemda.go.id'}</div></div></div><div class="kop-border"><div class="kop-border-inner"></div></div></div>`
+
+                            // Build items table HTML
+                            let itemsHtml = ''
+                            if (printItems.length > 0) {
+                              const itemRows = printItems.map((item: any, idx: number) =>
+                                `<tr><td class="center">${idx + 1}</td><td>${item.itemName || '-'}</td><td class="right">${item.quantity || 0}</td><td class="right">${formatRupiah(item.hargaSatuan || 0)}</td><td class="right" style="font-weight:600;">${formatRupiah(item.totalHarga || 0)}</td></tr>`
+                              ).join('')
+                              itemsHtml = `<div class="items-section"><div class="items-title">Detail Item Service</div><table class="items-table"><thead><tr><th class="center" style="width:30px;">No</th><th>Nama Item</th><th class="right">Qty</th><th class="right">Harga Satuan</th><th class="right">Total Harga</th></tr></thead><tbody>${itemRows}</tbody><tfoot><tr><td colspan="4" style="text-align:right;">Subtotal</td><td class="right">${formatRupiah(itemsSubtotal)}</td></tr></tfoot></table></div>`
+                            }
+
+                            // Build timeline HTML
+                            const timelineItems = detail.history.map((h: any, i: number) =>
+                              `<div class="timeline-item"><div class="timeline-dot ${i === 0 ? 'active' : 'done'}"></div><div><span class="timeline-status status-${h.status}">${h.status}</span><span class="timeline-date">${new Date(h.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span><p class="timeline-desc">${h.keterangan || '-'}</p></div></div>`
+                            ).join('')
+
+                            // Build signature HTML
+                            const sigHtml = `<div class="signature-section"><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div><div style="height:60px;"></div><div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div><div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div></div></div>`
+
+                            const printHtml = `<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Timeline Service - ${detail.nomorService}</title>
+<style>
+  @page { size: A4; margin: 15mm 15mm 20mm 15mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; color: #1a1a1a; line-height: 1.4; background: #fff; }
+  .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 0; position: relative; }
+  .kop-surat { text-align: center; padding-bottom: 8px; position: relative; }
+  .kop-content { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .kop-logo { width: 72px; height: 72px; border: 2px solid #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .kop-logo-inner { width: 60px; height: 60px; border: 1.5px solid #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
+  .kop-text { text-align: center; }
+  .kop-line1 { font-size: 11pt; font-weight: normal; letter-spacing: 1px; }
+  .kop-line2 { font-size: 14pt; font-weight: bold; letter-spacing: 2px; margin: 1px 0; }
+  .kop-line3 { font-size: 10pt; font-weight: normal; letter-spacing: 0.5px; }
+  .kop-address { font-size: 9pt; margin-top: 2px; color: #333; }
+  .kop-border { border-top: 3px double #1a1a1a; margin-top: 8px; padding-top: 0; }
+  .kop-border-inner { border-top: 1px solid #1a1a1a; margin-top: 2px; }
+  .doc-info { text-align: center; margin: 18px 0 14px 0; }
+  .doc-title { font-size: 13pt; font-weight: bold; letter-spacing: 1px; margin-bottom: 6px; }
+  .doc-meta { font-size: 9.5pt; color: #444; line-height: 1.6; }
+  .info-grid { display: grid; grid-template-columns: 120px 1fr; gap: 4px 12px; font-size: 10pt; margin-bottom: 16px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa; }
+  .info-label { font-weight: 600; color: #555; }
+  .items-section { margin: 14px 0; }
+  .items-title { font-size: 10pt; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .items-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .items-table thead th { background: #2c3e50; color: #fff; padding: 7px 6px; text-align: left; font-weight: 600; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.3px; }
+  .items-table thead th.right { text-align: right; }
+  .items-table thead th.center { text-align: center; }
+  .items-table tbody td { padding: 5px 6px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
+  .items-table tbody tr:nth-child(even) { background: #f8f9fa; }
+  .items-table tbody tr:nth-child(odd) { background: #fff; }
+  .items-table tfoot td { padding: 7px 6px; font-weight: bold; border-top: 2px solid #2c3e50; background: #ecf0f1; font-size: 9pt; }
+  .timeline-section { margin: 14px 0; }
+  .timeline-section-title { font-size: 10pt; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .timeline { position: relative; padding-left: 24px; }
+  .timeline-line { position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: #ccc; }
+  .timeline-item { position: relative; margin-bottom: 16px; }
+  .timeline-dot { position: absolute; left: -20px; top: 4px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; }
+  .timeline-dot.active { background: #2c3e50; }
+  .timeline-dot.done { background: #95a5a6; }
+  .timeline-status { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 9pt; font-weight: 600; margin-bottom: 2px; }
+  .timeline-date { font-size: 8.5pt; color: #888; margin-left: 6px; }
+  .timeline-desc { font-size: 9.5pt; color: #444; margin-top: 2px; }
+  .status-DIAJUKAN { background: #cce5ff; color: #004085; }
+  .status-DISETUJUI { background: #d1ecf1; color: #0c5460; }
+  .status-DITOLAK { background: #f8d7da; color: #721c24; }
+  .status-DIPROSES { background: #fff3cd; color: #856404; }
+  .status-PENGAJUAN { background: #e8daef; color: #6c3483; }
+  .status-MENUNGGU_PERSETUJUAN { background: #d6eaf8; color: #2e4053; }
+  .status-SELESAI { background: #d4edda; color: #155724; }
+  .status-PENDING { background: #ffeaa7; color: #6c5ce7; }
+  .signature-section { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .sig-block { text-align: center; width: 220px; }
+  .sig-date { font-size: 9pt; margin-bottom: 4px; }
+  .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
+  .sig-title { font-size: 8.5pt; font-weight: bold; }
+  .sig-nip { font-size: 8pt; color: #555; }
+  .doc-footer { margin-top: 30px; padding-top: 8px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; font-size: 7.5pt; color: #888; }
+  @media print { body { margin: 0; padding: 0; background: #fff; } .page { margin: 0; width: 100%; } }
+</style>
+</head>
+<body>
+<div class="page">
+  ${kopHtml}
+  <div class="doc-info">
+    <div class="doc-title">TIMELINE SERVICE KENDARAAN</div>
+    <div class="doc-meta">Nomor: ${docNumber}<br/>Nomor Service: ${detail.nomorService}<br/>Tanggal Cetak: ${printDate}</div>
+  </div>
+  <div class="info-grid">
+    <span class="info-label">Nomor Service</span><span>${detail.nomorService}</span>
+    <span class="info-label">Tanggal</span><span>${detail.tanggalService ? new Date(detail.tanggalService).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}</span>
+    <span class="info-label">Kendaraan</span><span>${detail.vehicle?.nomorPolisi || '-'} - ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}</span>
+    <span class="info-label">Bengkel</span><span>${detail.bengkel?.namaBengkel || '-'}</span>
+    <span class="info-label">Jenis Service</span><span>${detail.jenisService || '-'}</span>
+    <span class="info-label">Status</span><span>${detail.statusService}</span>
+    <span class="info-label">Total Biaya</span><span>${formatRupiah(detail.totalBiaya || 0)}</span>
+    <span class="info-label">Keterangan</span><span>${detail.keterangan || '-'}</span>
+  </div>
+  ${itemsHtml}
+  <div class="timeline-section">
+    <div class="timeline-section-title">Timeline Service</div>
+    <div class="timeline">
+      <div class="timeline-line"></div>
+      ${timelineItems}
+    </div>
+  </div>
+  ${sigHtml}
+  <div class="doc-footer">
+    <div>Dicetak: ${new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</div>
+    <div style="font-style:italic;">Dokumen ini merupakan catatan resmi dinas yang sah</div>
+    <div>Halaman 1 dari 1</div>
+  </div>
+</div>
+</body>
+</html>`
+                            const printWin = window.open('', '_blank', 'width=800,height=600')
+                            if (printWin) {
+                              printWin.document.write(printHtml)
+                              printWin.document.close()
+                              printWin.focus()
+                              setTimeout(() => printWin.print(), 500)
+                            }
+                          }}
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          Cetak Timeline
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="relative pl-6 max-h-48 overflow-y-auto">
-                        <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-slate-200" />
+                        <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-gradient-to-b from-teal-500/60 via-emerald-400/40 to-slate-200 dark:to-slate-700" />
                         <div className="space-y-4">
                           {detail.history.map((h: { id: string; status: string; keterangan: string | null; createdAt: string }, idx: number) => (
-                            <div key={h.id} className="relative flex items-start gap-3">
-                              <div className={'absolute -left-4 mt-1 h-3 w-3 rounded-full border-2 border-white ' + (idx === 0 ? 'bg-slate-700' : 'bg-slate-300') + ' z-10'} />
+                            <div key={h.id} className={`relative flex items-start gap-3 animate-slide-up animate-stagger-${Math.min(idx + 1, 8)}`}>
+                              <div className={'absolute -left-4 mt-1 h-3 w-3 rounded-full border-2 border-white dark:border-slate-800 z-10 shadow-sm ' + (idx === 0 ? 'bg-gradient-to-r from-teal-500 to-emerald-500' : 'bg-slate-300 dark:bg-slate-600')} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs">{h.status}</Badge>
+                                  <Badge variant="outline" className="text-xs shadow-sm">{h.status}</Badge>
                                   <span className="text-xs text-muted-foreground">{formatDate(h.createdAt)}</span>
                                 </div>
                                 <p className="text-muted-foreground text-xs mt-0.5">{h.keterangan}</p>
@@ -1177,18 +1562,18 @@ export function ServicePage() {
                 )}
 
                 {/* Documents Section */}
-                <Card className="shadow-sm border-0 bg-gradient-to-br from-white to-slate-50/50">
+                <Card className="animate-slide-up animate-stagger-5 shadow-sm border border-border/50 bg-gradient-to-br from-white to-slate-50/50 dark:from-card dark:to-slate-900/30">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <div className="h-1 w-4 rounded-full bg-slate-700" />
-                        <FileText className="h-4 w-4" />
+                        <div className="h-1 w-4 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500" />
+                        <FileText className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                         Dokumen
                       </CardTitle>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="gap-1.5"
+                        className="gap-1.5 rounded-lg border-border/50 hover:border-teal-500/50 hover:text-teal-600"
                         onClick={() => setShowUploadNota(true)}
                       >
                         <Upload className="h-3.5 w-3.5" />
@@ -1299,6 +1684,139 @@ export function ServicePage() {
             isUploading={uploadNotaMutation.isPending}
             progress={uploadProgress}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Photo Upload Dialog for Service Items */}
+      <Dialog open={itemPhotoDialogOpen} onOpenChange={(open) => {
+        setItemPhotoDialogOpen(open)
+        if (!open) {
+          setSelectedItemForPhotos(null)
+          setPhotoFiles([])
+          setPhotoPreviews([])
+          setPhotoKeterangan('')
+          photoPreviews.forEach(url => URL.revokeObjectURL(url))
+        }
+      }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ImagePlus className="h-5 w-5" />
+              Upload Foto Item
+            </DialogTitle>
+            <DialogDescription>
+              Upload foto untuk item: <strong>{selectedItemForPhotos?.itemName}</strong>
+              {detail && <span className="text-muted-foreground"> — {detail.nomorService}</span>}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Drag & drop / click area */}
+            <div
+              className="relative border-2 border-dashed rounded-lg p-6 text-center hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+                if (dropped.length === 0) {
+                  toast({ title: 'Format Salah', description: 'Hanya file gambar yang diperbolehkan', variant: 'destructive' })
+                  return
+                }
+                const newFiles = [...photoFiles, ...dropped].slice(0, 10)
+                setPhotoFiles(newFiles)
+                const newPreviews = newFiles.map(f => URL.createObjectURL(f))
+                setPhotoPreviews(newPreviews)
+              }}
+              onClick={() => document.getElementById('photo-upload-input')?.click()}
+            >
+              <ImagePlus className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Seret & lepas foto di sini, atau <span className="text-primary font-medium">klik untuk pilih</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Maksimal 10 file, JPG/PNG, maks 5MB per file
+              </p>
+              <input
+                id="photo-upload-input"
+                type="file"
+                accept="image/jpeg,image/png,image/jpg"
+                multiple
+                className="hidden"
+                onChange={handlePhotoFileSelect}
+              />
+            </div>
+
+            {/* Preview of selected files */}
+            {photoPreviews.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Preview ({photoPreviews.length} file)</Label>
+                <div className="flex flex-wrap gap-2">
+                  {photoPreviews.map((url, idx) => (
+                    <div key={idx} className="relative group">
+                      <div className="w-16 h-16 rounded-lg border overflow-hidden bg-white">
+                        <img src={url} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                      </div>
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full"
+                        onClick={() => handleRemovePhotoFile(idx)}
+                        title="Hapus"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 w-16 truncate">
+                        {photoFiles[idx]?.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Keterangan */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Keterangan (opsional)</Label>
+              <Input
+                placeholder="Mis: Foto perbaikan, kondisi sebelum, dll."
+                value={photoKeterangan}
+                onChange={(e) => setPhotoKeterangan(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setItemPhotoDialogOpen(false)} disabled={uploadItemPhotosMutation.isPending}>
+              Batal
+            </Button>
+            <Button
+              onClick={handleUploadPhotos}
+              disabled={photoFiles.length === 0 || uploadItemPhotosMutation.isPending}
+              className="gap-2"
+            >
+              {uploadItemPhotosMutation.isPending && <RefreshCw className="h-4 w-4 animate-spin" />}
+              <Upload className="h-4 w-4" />
+              Upload {photoFiles.length > 0 ? `${photoFiles.length} Foto` : 'Foto'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Photo Viewer (Full Size) */}
+      <Dialog open={photoViewerOpen} onOpenChange={setPhotoViewerOpen}>
+        <DialogContent className="sm:max-w-3xl p-2">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Lihat Foto</DialogTitle>
+            <DialogDescription>Tampilan foto ukuran penuh</DialogDescription>
+          </DialogHeader>
+          {photoViewerSrc && (
+            <div className="flex items-center justify-center bg-black/5 rounded-lg overflow-hidden max-h-[80vh]">
+              <img
+                src={photoViewerSrc}
+                alt="Foto item service"
+                className="max-w-full max-h-[78vh] object-contain"
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

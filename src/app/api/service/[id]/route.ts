@@ -14,7 +14,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       include: {
         vehicle: true,
         bengkel: true,
-        items: true,
+        items: {
+          include: { photos: true },
+        },
         documents: true,
         history: {
           orderBy: { createdAt: 'desc' },
@@ -111,7 +113,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       include: {
         vehicle: true,
         bengkel: true,
-        items: true,
+        items: {
+          include: { photos: true },
+        },
       },
     })
 

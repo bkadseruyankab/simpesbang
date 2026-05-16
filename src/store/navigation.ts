@@ -11,6 +11,7 @@ export type PageKey =
   | 'laporan' 
   | 'pengaturan'
   | 'notifikasi'
+  | 'profil'
 
 interface NavigationState {
   currentPage: PageKey
@@ -22,6 +23,7 @@ interface NavigationState {
 export const useNavigationStore = create<NavigationState>((set) => ({
   currentPage: 'dashboard',
   setCurrentPage: (page) => set({ currentPage: page }),
-  sidebarOpen: true,
+  // Default sidebar open for desktop; on mobile it's managed by the Sheet component
+  sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 768,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 }))

@@ -16,6 +16,33 @@ export async function GET() {
       settingsMap.bengkel_can_create_service = 'false'
     }
 
+    // Default values for application identity settings
+    const appDefaults: Record<string, string> = {
+      app_name: 'SIService BKAD',
+      app_short_name: 'BKAD',
+      app_description: '',
+      app_instansi: 'Badan Keuangan dan Aset Daerah',
+      app_address: '',
+      app_phone: '',
+      app_email: '',
+      app_logo: '',
+      app_favicon: '',
+      app_kop_line1: 'PEMERINTAH KABUPATEN/KOTA',
+      app_kop_line2: 'BADAN KEUANGAN DAN ASET DAERAH',
+      app_kop_line3: 'UNIT LAYANAN PENGADAAN',
+      app_kepala_nama: '',
+      app_kepala_nip: '',
+      app_kepala_jabatan: 'Kepala BKAD',
+      app_sekda_nama: '',
+      app_sekda_nip: '',
+    }
+
+    for (const [key, defaultValue] of Object.entries(appDefaults)) {
+      if (!(key in settingsMap)) {
+        settingsMap[key] = defaultValue
+      }
+    }
+
     return NextResponse.json(settingsMap)
   } catch (error) {
     console.error('Error fetching settings:', error)

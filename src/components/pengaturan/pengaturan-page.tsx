@@ -41,8 +41,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, ActionIcon } from 'lucide-react'
+import { Settings, Building2, Mail, Users, FileText, Database, Calendar, Save, Plus, Trash2, Edit, Download, Upload, Shield, Clock, User, Image as ImageIcon, Globe, Palette, Stamp, PenLine, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
@@ -63,7 +64,7 @@ export function PengaturanPage() {
   const [activeTab, setActiveTab] = useState('umum')
   const [userDialogOpen, setUserDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<any>(null)
-  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '' })
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '', isActive: true })
 
   // Fetch settings
   const { data: settings = {}, isLoading: loadingSettings } = useQuery({
@@ -84,13 +85,14 @@ export function PengaturanPage() {
   })
 
   // Fetch workshops for user form
-  const { data: workshops = [] } = useQuery({
+  const { data: workshopsRaw } = useQuery({
     queryKey: ['workshops-pengaturan'],
     queryFn: async () => {
-      const res = await fetch('/api/bengkel')
+      const res = await fetch('/api/bengkel?limit=100')
       return res.json()
     },
   })
+  const workshops = Array.isArray(workshopsRaw?.data) ? workshopsRaw.data : Array.isArray(workshopsRaw) ? workshopsRaw : []
 
   // Fetch audit logs
   const { data: auditData, isLoading: loadingAudit } = useQuery({
@@ -147,12 +149,99 @@ export function PengaturanPage() {
       queryClient.invalidateQueries({ queryKey: ['pengaturan-users'] })
       toast.success('User berhasil ditambahkan')
       setUserDialogOpen(false)
-      setUserForm({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '' })
+      setEditingUser(null)
+      setUserForm({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '', isActive: true })
     },
     onError: (err: Error) => {
       toast.error(err.message)
     },
   })
+
+  // Update user mutation
+  const updateUser = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch('/api/pengaturan/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Gagal mengupdate user')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pengaturan-users'] })
+      toast.success('User berhasil diperbarui')
+      setUserDialogOpen(false)
+      setEditingUser(null)
+      setUserForm({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '', isActive: true })
+    },
+    onError: (err: Error) => {
+      toast.error(err.message)
+    },
+  })
+
+  // Delete user mutation (toggles isActive)
+  const deleteUser = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/pengaturan/users?id=${userId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Gagal menghapus user')
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['pengaturan-users'] })
+      toast.success(data.isActive ? 'User berhasil diaktifkan kembali' : 'User berhasil dinonaktifkan')
+    },
+    onError: (err: Error) => {
+      toast.error(err.message)
+    },
+  })
+
+  // Handle opening edit dialog
+  const handleEditUser = (user: any) => {
+    setEditingUser(user)
+    setUserForm({
+      name: user.name || '',
+      email: user.email || '',
+      password: '',
+      role: user.role || 'ADMIN',
+      bengkelId: user.bengkelId || '',
+      isActive: user.isActive !== undefined ? user.isActive : true,
+    })
+    setUserDialogOpen(true)
+  }
+
+  // Handle form submit
+  const handleUserFormSubmit = () => {
+    if (editingUser) {
+      // Update existing user
+      const updateData: any = {
+        id: editingUser.id,
+        name: userForm.name,
+        email: userForm.email,
+        role: userForm.role,
+        isActive: userForm.isActive,
+      }
+      if (userForm.role === 'BENGKEL') {
+        updateData.bengkelId = userForm.bengkelId || null
+      }
+      // Only send password if provided
+      if (userForm.password) {
+        updateData.password = userForm.password
+      }
+      updateUser.mutate(updateData)
+    } else {
+      // Create new user
+      createUser.mutate(userForm)
+    }
+  }
 
   // Backup mutation
   const handleBackup = async () => {
@@ -177,6 +266,94 @@ export function PengaturanPage() {
     }
   }
 
+  // Restore state
+  const [restoreFile, setRestoreFile] = useState<File | null>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
+
+  const handleRestore = async () => {
+    if (!restoreFile) return
+    try {
+      setIsRestoring(true)
+      toast.loading('Memulihkan database...', { id: 'restore' })
+      const formData = new FormData()
+      formData.append('file', restoreFile)
+      const res = await fetch('/api/pengaturan/backup', {
+        method: 'PUT',
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Gagal memulihkan database')
+      toast.success('Database berhasil dipulihkan! Halaman akan dimuat ulang...', { id: 'restore', duration: 3000 })
+      setRestoreFile(null)
+      // Reload after a short delay to let the DB reconnect
+      setTimeout(() => {
+        window.location.reload()
+      }, 2000)
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal memulihkan database', { id: 'restore' })
+    } finally {
+      setIsRestoring(false)
+    }
+  }
+
+  // Test notification states
+  const [testingWA, setTestingWA] = useState(false)
+  const [testingEmail, setTestingEmail] = useState(false)
+
+  const handleTestWhatsApp = async () => {
+    if (!localSettings.fonnte_api_key) {
+      toast.error('API Key Fonnte belum diisi')
+      return
+    }
+    if (!localSettings.fonnte_admin_phone) {
+      toast.error('Nomor Admin belum diisi')
+      return
+    }
+    try {
+      setTestingWA(true)
+      const res = await fetch('/api/pengaturan/test-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'whatsapp', testTarget: localSettings.fonnte_admin_phone }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(data.message)
+      } else {
+        toast.error(data.error || 'Gagal mengirim test WhatsApp')
+      }
+    } catch {
+      toast.error('Gagal menghubungi server')
+    } finally {
+      setTestingWA(false)
+    }
+  }
+
+  const handleTestEmail = async () => {
+    if (!localSettings.smtp_host || !localSettings.smtp_username) {
+      toast.error('Konfigurasi SMTP belum lengkap')
+      return
+    }
+    try {
+      setTestingEmail(true)
+      const res = await fetch('/api/pengaturan/test-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'email', testTarget: localSettings.smtp_from_email || localSettings.smtp_username }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(data.message)
+      } else {
+        toast.error(data.error || 'Gagal mengirim test email')
+      }
+    } catch {
+      toast.error('Gagal menghubungi server')
+    } finally {
+      setTestingEmail(false)
+    }
+  }
+
   const [localSettings, setLocalSettings] = useState<Record<string, string>>({})
 
   // Sync settings when loaded
@@ -189,8 +366,9 @@ export function PengaturanPage() {
   const handleSaveSettings = (section: string) => {
     const sectionKeys: Record<string, string[]> = {
       umum: ['nama_instansi', 'tahun_aktif', 'nomor_surat_otomatis', 'format_nomor_surat', 'bengkel_can_create_service'],
-      email: ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from_email', 'whatsapp_api_key', 'whatsapp_api_url',
+      email: ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from_email', 'fonnte_api_key', 'fonnte_admin_phone',
         'notif_service_diajukan', 'notif_service_disetujui', 'notif_service_ditolak', 'notif_service_selesai', 'notif_anggaran_warning'],
+      identitas: ['app_name', 'app_short_name', 'app_description', 'app_instansi', 'app_address', 'app_phone', 'app_email', 'app_logo', 'app_favicon', 'app_kop_line1', 'app_kop_line2', 'app_kop_line3', 'app_kepala_nama', 'app_kepala_nip', 'app_kepala_jabatan', 'app_sekda_nama', 'app_sekda_nip'],
     }
     const keys = sectionKeys[section] || []
     const updateData: Record<string, string> = {}
@@ -198,6 +376,26 @@ export function PengaturanPage() {
       if (localSettings[k] !== undefined) updateData[k] = localSettings[k]
     })
     updateSettings.mutate(updateData)
+  }
+
+  const handleFileUpload = async (file: File, type: 'logo' | 'favicon') => {
+    try {
+      toast.loading(`Mengupload ${type}...`, { id: `upload-${type}` })
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', type)
+      const res = await fetch('/api/pengaturan/upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || err.message || 'Gagal mengupload')
+      }
+      const data = await res.json()
+      setLocalSettings(s => ({ ...s, [data.key]: data.path }))
+      queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
+      toast.success(`${type === 'logo' ? 'Logo' : 'Favicon'} berhasil diupload`, { id: `upload-${type}` })
+    } catch (err: any) {
+      toast.error(err.message || `Gagal mengupload ${type}`, { id: `upload-${type}` })
+    }
   }
 
   const formatDate = (date: string) =>
@@ -215,28 +413,31 @@ export function PengaturanPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
+      <div className="animate-slide-up">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Settings className="h-6 w-6 text-primary" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white">
+            <Settings className="h-5 w-5" />
+          </div>
           Pengaturan Sistem
         </h1>
-        <p className="text-muted-foreground">Konfigurasi dan manajemen sistem</p>
+        <p className="text-muted-foreground mt-1">Konfigurasi dan manajemen sistem</p>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="umum" className="text-xs">Umum</TabsTrigger>
-          <TabsTrigger value="email" className="text-xs">Email & Notifikasi</TabsTrigger>
-          <TabsTrigger value="users" className="text-xs">Manajemen User</TabsTrigger>
-          <TabsTrigger value="audit" className="text-xs">Audit Log</TabsTrigger>
-          <TabsTrigger value="backup" className="text-xs">Backup & Restore</TabsTrigger>
-          <TabsTrigger value="tahun" className="text-xs">Pergantian Tahun</TabsTrigger>
+        <TabsList className="animate-slide-up animate-stagger-1 flex-wrap h-auto gap-1 bg-muted/40 backdrop-blur-sm rounded-2xl p-1.5 border border-border/30">
+          <TabsTrigger value="umum" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Umum</TabsTrigger>
+          <TabsTrigger value="identitas" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200"><Globe className="h-3.5 w-3.5 mr-1" /> Identitas Aplikasi</TabsTrigger>
+          <TabsTrigger value="email" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Email & Notifikasi</TabsTrigger>
+          <TabsTrigger value="users" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Manajemen User</TabsTrigger>
+          <TabsTrigger value="audit" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Audit Log</TabsTrigger>
+          <TabsTrigger value="backup" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Backup & Restore</TabsTrigger>
+          <TabsTrigger value="tahun" className="text-xs rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-600 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-500/20 transition-all duration-200">Pergantian Tahun</TabsTrigger>
         </TabsList>
 
         {/* Tab: Umum */}
         <TabsContent value="umum" className="mt-4">
-          <Card>
+          <Card className="animate-scale-in border border-border/50 shadow-sm rounded-2xl card-hover">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" /> Pengaturan Umum</CardTitle>
               <CardDescription>Konfigurasi dasar sistem</CardDescription>
@@ -305,7 +506,7 @@ export function PengaturanPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={() => handleSaveSettings('umum')} disabled={updateSettings.isPending}>
+                <Button onClick={() => handleSaveSettings('umum')} disabled={updateSettings.isPending} className="rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-lg shadow-teal-500/20">
                   <Save className="h-4 w-4 mr-1" /> Simpan Pengaturan
                 </Button>
               </div>
@@ -313,10 +514,280 @@ export function PengaturanPage() {
           </Card>
         </TabsContent>
 
+        {/* Tab: Identitas Aplikasi */}
+        <TabsContent value="identitas" className="mt-4">
+          <div className="space-y-6">
+            {/* Card 1: Logo & Favicon */}
+            <Card className="animate-fade-in animate-stagger-1 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><ImageIcon className="h-5 w-5" /> Logo & Favicon</CardTitle>
+                <CardDescription>Upload logo dan favicon aplikasi</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex flex-col sm:flex-row gap-6">
+                  {/* Logo */}
+                  <div className="flex-1 space-y-3">
+                    <Label className="text-sm font-medium">Logo Aplikasi</Label>
+                    <div className="flex items-center gap-4">
+                      <div className="h-20 w-20 rounded-full border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0">
+                        {localSettings.app_logo ? (
+                          <img src={localSettings.app_logo} alt="Logo" className="h-20 w-20 rounded-full object-cover" />
+                        ) : (
+                          <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/svg+xml"
+                          className="hidden"
+                          id="logo-upload"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileUpload(file, 'logo')
+                            e.target.value = ''
+                          }}
+                        />
+                        <Button variant="outline" size="sm" onClick={() => document.getElementById('logo-upload')?.click()}>
+                          <Upload className="h-4 w-4 mr-1" /> Upload Logo
+                        </Button>
+                        <p className="text-xs text-muted-foreground">JPG, PNG, atau SVG. Maks 2MB.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator orientation="vertical" className="hidden sm:block h-auto" />
+
+                  {/* Favicon */}
+                  <div className="flex-1 space-y-3">
+                    <Label className="text-sm font-medium">Favicon</Label>
+                    <div className="flex items-center gap-4">
+                      <div className="h-8 w-8 border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0">
+                        {localSettings.app_favicon ? (
+                          <img src={localSettings.app_favicon} alt="Favicon" className="h-8 w-8 object-cover" />
+                        ) : (
+                          <Globe className="h-4 w-4 text-muted-foreground/40" />
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          accept="image/x-icon,image/png,image/svg+xml"
+                          className="hidden"
+                          id="favicon-upload"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileUpload(file, 'favicon')
+                            e.target.value = ''
+                          }}
+                        />
+                        <Button variant="outline" size="sm" onClick={() => document.getElementById('favicon-upload')?.click()}>
+                          <Upload className="h-4 w-4 mr-1" /> Upload Favicon
+                        </Button>
+                        <p className="text-xs text-muted-foreground">ICO, PNG, atau SVG. Maks 1MB.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Card 2: Informasi Aplikasi */}
+            <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" /> Informasi Aplikasi</CardTitle>
+                <CardDescription>Identitas dan informasi dasar aplikasi</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="app_name">Nama Aplikasi</Label>
+                    <Input
+                      id="app_name"
+                      value={localSettings.app_name || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_name: e.target.value }))}
+                      placeholder="SIService BKAD"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_short_name">Nama Singkat</Label>
+                    <Input
+                      id="app_short_name"
+                      value={localSettings.app_short_name || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_short_name: e.target.value }))}
+                      placeholder="BKAD"
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="app_description">Deskripsi Aplikasi</Label>
+                    <Input
+                      id="app_description"
+                      value={localSettings.app_description || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_description: e.target.value }))}
+                      placeholder="Sistem Informasi Service Kendaraan Dinas"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_instansi">Nama Instansi</Label>
+                    <Input
+                      id="app_instansi"
+                      value={localSettings.app_instansi || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_instansi: e.target.value }))}
+                      placeholder="Badan Keuangan dan Aset Daerah"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_address">Alamat</Label>
+                    <Input
+                      id="app_address"
+                      value={localSettings.app_address || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_address: e.target.value }))}
+                      placeholder="Jl. ..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_phone">Telepon</Label>
+                    <Input
+                      id="app_phone"
+                      value={localSettings.app_phone || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_phone: e.target.value }))}
+                      placeholder="(021) 1234567"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_email">Email</Label>
+                    <Input
+                      id="app_email"
+                      type="email"
+                      value={localSettings.app_email || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_email: e.target.value }))}
+                      placeholder="info@bkad.go.id"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Card 3: Kop Surat */}
+            <Card className="animate-fade-in animate-stagger-3 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><PenLine className="h-5 w-5" /> Kop Surat</CardTitle>
+                <CardDescription>Konfigurasi kop surat untuk cetak laporan resmi</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="app_kop_line1">Baris 1</Label>
+                    <Input
+                      id="app_kop_line1"
+                      value={localSettings.app_kop_line1 || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_kop_line1: e.target.value }))}
+                      placeholder="PEMERINTAH KABUPATEN/KOTA"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_kop_line2">Baris 2</Label>
+                    <Input
+                      id="app_kop_line2"
+                      value={localSettings.app_kop_line2 || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_kop_line2: e.target.value }))}
+                      placeholder="BADAN KEUANGAN DAN ASET DAERAH"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_kop_line3">Baris 3</Label>
+                    <Input
+                      id="app_kop_line3"
+                      value={localSettings.app_kop_line3 || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_kop_line3: e.target.value }))}
+                      placeholder="UNIT LAYANAN PENGADAAN"
+                    />
+                  </div>
+                </div>
+                {/* Preview Kop Surat */}
+                <Separator />
+                <div className="rounded-lg border p-4 bg-muted/30">
+                  <p className="text-xs text-muted-foreground mb-2">Preview Kop Surat:</p>
+                  <div className="text-center">
+                    <p className="text-sm font-bold tracking-wider">{localSettings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</p>
+                    <p className="text-base font-bold tracking-wider">{localSettings.app_kop_line2 || 'BADAN KEUANGAN DAN ASET DAERAH'}</p>
+                    <p className="text-sm font-semibold tracking-wider">{localSettings.app_kop_line3 || 'UNIT LAYANAN PENGADAAN'}</p>
+                    <div className="border-b-2 border-black mt-2" />
+                    <div className="border-b border-black mt-0.5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Card 4: Tanda Tangan */}
+            <Card className="animate-fade-in animate-stagger-4 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Stamp className="h-5 w-5" /> Tanda Tangan</CardTitle>
+                <CardDescription>Data pejabat untuk tanda tangan laporan resmi</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="app_kepala_nama">Nama Kepala</Label>
+                    <Input
+                      id="app_kepala_nama"
+                      value={localSettings.app_kepala_nama || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_kepala_nama: e.target.value }))}
+                      placeholder="Nama Kepala BKAD"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_kepala_nip">NIP Kepala</Label>
+                    <Input
+                      id="app_kepala_nip"
+                      value={localSettings.app_kepala_nip || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_kepala_nip: e.target.value }))}
+                      placeholder="19680101 199001 1 001"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_kepala_jabatan">Jabatan Kepala</Label>
+                    <Input
+                      id="app_kepala_jabatan"
+                      value={localSettings.app_kepala_jabatan || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_kepala_jabatan: e.target.value }))}
+                      placeholder="Kepala BKAD"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_sekda_nama">Nama Sekretaris Daerah</Label>
+                    <Input
+                      id="app_sekda_nama"
+                      value={localSettings.app_sekda_nama || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_sekda_nama: e.target.value }))}
+                      placeholder="Nama Sekretaris Daerah"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="app_sekda_nip">NIP Sekretaris Daerah</Label>
+                    <Input
+                      id="app_sekda_nip"
+                      value={localSettings.app_sekda_nip || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, app_sekda_nip: e.target.value }))}
+                      placeholder="19680101 199001 1 002"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end">
+              <Button onClick={() => handleSaveSettings('identitas')} disabled={updateSettings.isPending} className="rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-lg shadow-teal-500/20">
+                <Save className="h-4 w-4 mr-1" /> Simpan Pengaturan
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
         {/* Tab: Email & Notifikasi */}
         <TabsContent value="email" className="mt-4">
           <div className="space-y-6">
-            <Card>
+            <Card className="animate-fade-in animate-stagger-1 border border-border/50 shadow-sm rounded-2xl card-hover">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5" /> Konfigurasi Email (SMTP)</CardTitle>
                 <CardDescription>Pengaturan server email untuk notifikasi</CardDescription>
@@ -365,40 +836,76 @@ export function PengaturanPage() {
                     />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>
-                  WhatsApp API
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>API Key</Label>
-                    <Input
-                      type="password"
-                      value={localSettings.whatsapp_api_key || ''}
-                      onChange={(e) => setLocalSettings(s => ({ ...s, whatsapp_api_key: e.target.value }))}
-                      placeholder="Masukkan API key"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>API URL</Label>
-                    <Input
-                      value={localSettings.whatsapp_api_url || ''}
-                      onChange={(e) => setLocalSettings(s => ({ ...s, whatsapp_api_url: e.target.value }))}
-                      placeholder="https://api.whatsapp.com/v1"
-                    />
-                  </div>
+                <div className="mt-4 flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTestEmail}
+                    disabled={testingEmail}
+                  >
+                    {testingEmail ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5" />
+                    ) : (
+                      <Mail className="h-4 w-4 mr-1.5" />
+                    )}
+                    Test Email
+                  </Button>
+                  <p className="text-xs text-muted-foreground">Email test akan dikirim ke alamat From Email yang dikonfigurasi</p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>
+                  Notifikasi WhatsApp (Fonnte)
+                </CardTitle>
+                <CardDescription>Konfigurasi Fonnte untuk pengiriman notifikasi WhatsApp</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>API Key Fonnte</Label>
+                    <Input
+                      type="password"
+                      value={localSettings.fonnte_api_key || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, fonnte_api_key: e.target.value }))}
+                      placeholder="Masukkan API key dari fonnte.co.id"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nomor Admin</Label>
+                    <Input
+                      value={localSettings.fonnte_admin_phone || ''}
+                      onChange={(e) => setLocalSettings(s => ({ ...s, fonnte_admin_phone: e.target.value }))}
+                      placeholder="6281234567890"
+                    />
+                    <p className="text-xs text-muted-foreground">Nomor WA admin untuk menerima notifikasi (format: 628xxx)</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTestWhatsApp}
+                    disabled={testingWA}
+                  >
+                    {testingWA ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5" />
+                    ) : (
+                      <MessageSquare className="h-4 w-4 mr-1.5" />
+                    )}
+                    Test Koneksi
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Daftar dan dapatkan API key di <a href="https://fonnte.co.id" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">fonnte.co.id</a>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="animate-fade-in animate-stagger-3 border border-border/50 shadow-sm rounded-2xl card-hover">
               <CardHeader>
                 <CardTitle>Notifikasi per Event</CardTitle>
                 <CardDescription>Aktifkan notifikasi untuk setiap jenis event</CardDescription>
@@ -426,7 +933,7 @@ export function PengaturanPage() {
             </Card>
 
             <div className="flex justify-end">
-              <Button onClick={() => handleSaveSettings('email')} disabled={updateSettings.isPending}>
+              <Button onClick={() => handleSaveSettings('email')} disabled={updateSettings.isPending} className="rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-lg shadow-teal-500/20">
                 <Save className="h-4 w-4 mr-1" /> Simpan Pengaturan
               </Button>
             </div>
@@ -435,22 +942,32 @@ export function PengaturanPage() {
 
         {/* Tab: Manajemen User */}
         <TabsContent value="users" className="mt-4">
-          <Card>
+          <Card className="animate-scale-in border border-border/50 shadow-sm rounded-2xl card-hover">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Manajemen User</CardTitle>
                 <CardDescription>Kelola pengguna sistem</CardDescription>
               </div>
-              <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
+              <Dialog open={userDialogOpen} onOpenChange={(open) => {
+                setUserDialogOpen(open)
+                if (!open) {
+                  setEditingUser(null)
+                  setUserForm({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '', isActive: true })
+                }
+              }}>
                 <DialogTrigger asChild>
-                  <Button size="sm" onClick={() => { setEditingUser(null); setUserForm({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '' }) }}>
+                  <Button size="sm" onClick={() => {
+                    setEditingUser(null)
+                    setUserForm({ name: '', email: '', password: '', role: 'ADMIN', bengkelId: '', isActive: true })
+                    setUserDialogOpen(true)
+                  }}>
                     <Plus className="h-4 w-4 mr-1" /> Tambah User
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>{editingUser ? 'Edit User' : 'Tambah User Baru'}</DialogTitle>
-                    <DialogDescription>Masukkan data pengguna sistem</DialogDescription>
+                    <DialogDescription>{editingUser ? 'Perbarui data pengguna sistem' : 'Masukkan data pengguna sistem'}</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="space-y-2">
@@ -461,7 +978,13 @@ export function PengaturanPage() {
                       <Label>Email</Label>
                       <Input value={userForm.email} onChange={(e) => setUserForm(f => ({ ...f, email: e.target.value }))} placeholder="email@domain.com" type="email" />
                     </div>
-                    {!editingUser && (
+                    {editingUser ? (
+                      <div className="space-y-2">
+                        <Label>Password</Label>
+                        <Input value={userForm.password} onChange={(e) => setUserForm(f => ({ ...f, password: e.target.value }))} placeholder="Kosongkan jika tidak ingin mengubah" type="password" />
+                        <p className="text-xs text-muted-foreground">Kosongkan jika tidak ingin mengubah password</p>
+                      </div>
+                    ) : (
                       <div className="space-y-2">
                         <Label>Password</Label>
                         <Input value={userForm.password} onChange={(e) => setUserForm(f => ({ ...f, password: e.target.value }))} placeholder="Minimal 8 karakter" type="password" />
@@ -496,11 +1019,25 @@ export function PengaturanPage() {
                         </Select>
                       </div>
                     )}
+                    {editingUser && (
+                      <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <Label>Status Aktif</Label>
+                          <p className="text-xs text-muted-foreground">
+                            {userForm.isActive ? 'User dapat mengakses sistem' : 'User tidak dapat mengakses sistem'}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={userForm.isActive}
+                          onCheckedChange={(checked) => setUserForm(f => ({ ...f, isActive: checked }))}
+                        />
+                      </div>
+                    )}
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setUserDialogOpen(false)}>Batal</Button>
-                    <Button onClick={() => createUser.mutate(userForm)} disabled={createUser.isPending}>
-                      {editingUser ? 'Simpan' : 'Tambah'}
+                    <Button onClick={handleUserFormSubmit} disabled={createUser.isPending || updateUser.isPending}>
+                      {editingUser ? 'Simpan Perubahan' : 'Tambah'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -539,7 +1076,12 @@ export function PengaturanPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleEditUser(user)}
+                            >
                               <Edit className="h-3.5 w-3.5" />
                             </Button>
                             <AlertDialog>
@@ -550,14 +1092,22 @@ export function PengaturanPage() {
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Hapus User</AlertDialogTitle>
+                                  <AlertDialogTitle>{user.isActive ? 'Nonaktifkan User' : 'Aktifkan User'}</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Yakin ingin menghapus user &quot;{user.name}&quot;? Tindakan ini tidak dapat dibatalkan.
+                                    {user.isActive
+                                      ? `Yakin ingin menonaktifkan user "${user.name}"? User tidak akan dapat mengakses sistem.`
+                                      : `Yakin ingin mengaktifkan kembali user "${user.name}"? User akan dapat mengakses sistem kembali.`
+                                    }
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Batal</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90">Hapus</AlertDialogAction>
+                                  <AlertDialogAction
+                                    className={user.isActive ? 'bg-destructive text-white hover:bg-destructive/90' : ''}
+                                    onClick={() => deleteUser.mutate(user.id)}
+                                  >
+                                    {user.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                                  </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
@@ -588,7 +1138,7 @@ export function PengaturanPage() {
 
         {/* Tab: Audit Log */}
         <TabsContent value="audit" className="mt-4">
-          <Card>
+          <Card className="animate-scale-in border border-border/50 shadow-sm rounded-2xl card-hover">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> Audit Log</CardTitle>
               <CardDescription>Riwayat aktivitas sistem</CardDescription>
@@ -660,84 +1210,231 @@ export function PengaturanPage() {
         {/* Tab: Backup & Restore */}
         <TabsContent value="backup" className="mt-4">
           <div className="space-y-6">
-            <Card>
+            {/* Database Stats */}
+            <Card className="animate-fade-in animate-stagger-1 border border-border/50 shadow-sm rounded-2xl card-hover overflow-hidden">
+              <div className="h-1.5 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500" />
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Backup Database</CardTitle>
-                <CardDescription>Unduh cadangan database sistem</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-white">
+                    <Database className="h-4 w-4" />
+                  </div>
+                  Informasi Database
+                </CardTitle>
+                <CardDescription>Status dan statistik database saat ini</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {loadingBackup ? (
-                  <Skeleton className="h-20" />
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {[1,2,3,4].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+                  </div>
                 ) : (
-                  <>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">Ukuran Database</p>
-                        <p className="text-lg font-bold">{backupInfo?.stats?.dbSizeFormatted || 'N/A'}</p>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-xl border border-border/50 p-3 bg-gradient-to-br from-teal-50 to-transparent dark:from-teal-950/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Database className="h-3.5 w-3.5 text-teal-600" />
+                        <p className="text-[11px] text-muted-foreground">Ukuran Database</p>
                       </div>
-                      <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">Total User</p>
-                        <p className="text-lg font-bold">{backupInfo?.stats?.users || 0}</p>
-                      </div>
-                      <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">Total Kendaraan</p>
-                        <p className="text-lg font-bold">{backupInfo?.stats?.vehicles || 0}</p>
-                      </div>
-                      <div className="rounded-lg border p-3">
-                        <p className="text-xs text-muted-foreground">Total Service</p>
-                        <p className="text-lg font-bold">{backupInfo?.stats?.services || 0}</p>
-                      </div>
+                      <p className="text-lg font-bold text-teal-700 dark:text-teal-400">{backupInfo?.stats?.dbSizeFormatted || 'N/A'}</p>
                     </div>
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div>
-                        <p className="text-sm font-medium">Backup Terakhir</p>
-                        <p className="text-xs text-muted-foreground">
-                          {backupInfo?.lastBackup
-                            ? formatDate(backupInfo.lastBackup)
-                            : 'Belum pernah dibackup'}
-                        </p>
+                    <div className="rounded-xl border border-border/50 p-3 bg-gradient-to-br from-sky-50 to-transparent dark:from-sky-950/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Users className="h-3.5 w-3.5 text-sky-600" />
+                        <p className="text-[11px] text-muted-foreground">Total User</p>
                       </div>
-                      <Button onClick={handleBackup}>
-                        <Download className="h-4 w-4 mr-1" /> Backup Sekarang
-                      </Button>
+                      <p className="text-lg font-bold text-sky-700 dark:text-sky-400">{backupInfo?.stats?.users || 0}</p>
                     </div>
-                  </>
+                    <div className="rounded-xl border border-border/50 p-3 bg-gradient-to-br from-amber-50 to-transparent dark:from-amber-950/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Shield className="h-3.5 w-3.5 text-amber-600" />
+                        <p className="text-[11px] text-muted-foreground">Total Kendaraan</p>
+                      </div>
+                      <p className="text-lg font-bold text-amber-700 dark:text-amber-400">{backupInfo?.stats?.vehicles || 0}</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 p-3 bg-gradient-to-br from-emerald-50 to-transparent dark:from-emerald-950/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                        <p className="text-[11px] text-muted-foreground">Total Service</p>
+                      </div>
+                      <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{backupInfo?.stats?.services || 0}</p>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card>
+            {/* Backup Section */}
+            <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Restore Database</CardTitle>
-                <CardDescription>Pulihkan database dari file backup</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 text-white">
+                    <Download className="h-4 w-4" />
+                  </div>
+                  Backup Database
+                </CardTitle>
+                <CardDescription>Unduh cadangan database sistem dalam format SQLite</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+              <CardContent className="space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border/50 p-4 bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/40">
+                      <Clock className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Backup Terakhir</p>
+                      <p className="text-xs text-muted-foreground">
+                        {backupInfo?.lastBackup
+                          ? formatDate(backupInfo.lastBackup)
+                          : 'Belum pernah dibackup'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={handleBackup} className="rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-lg shadow-emerald-500/20">
+                    <Download className="h-4 w-4 mr-1.5" /> Backup Sekarang
+                  </Button>
+                </div>
+                <div className="rounded-xl border border-dashed border-border/50 p-4 bg-muted/20">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-bold mt-0.5">i</div>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>File backup berisi salinan lengkap database dalam format SQLite (.db).</p>
+                      <p>Disarankan untuk melakukan backup secara berkala untuk keamanan data.</p>
+                      <p>File backup dapat digunakan untuk memulihkan data melalui fitur Restore di bawah.</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Restore Section */}
+            <Card className="animate-fade-in animate-stagger-3 border border-border/50 shadow-sm rounded-2xl card-hover overflow-hidden">
+              <div className="h-1.5 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-red-500 to-orange-600 text-white">
+                    <Upload className="h-4 w-4" />
+                  </div>
+                  Restore Database
+                </CardTitle>
+                <CardDescription>Pulihkan database dari file backup yang telah diunduh sebelumnya</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Warning */}
+                <div className="flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+                    <Shield className="h-4 w-4 text-destructive" />
+                  </div>
                   <div>
-                    <p className="text-sm font-medium text-destructive">Peringatan</p>
-                    <p className="text-xs text-muted-foreground">Restore akan menimpa seluruh data yang ada. Pastikan Anda sudah membuat backup sebelum melakukan restore.</p>
+                    <p className="text-sm font-semibold text-destructive">Peringatan!</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Restore akan menimpa seluruh data yang ada saat ini. Pastikan Anda sudah membuat backup sebelum melakukan restore. Tindakan ini TIDAK DAPAT dibatalkan.</p>
+                  </div>
+                </div>
+
+                {/* File Selection */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Pilih File Backup (.db)</Label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".db"
+                      className="hidden"
+                      id="restore-file-input"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setRestoreFile(file)
+                        }
+                        e.target.value = ''
+                      }}
+                    />
+                    <div
+                      className="flex items-center gap-3 rounded-xl border-2 border-dashed border-border/50 p-4 cursor-pointer hover:border-primary/30 hover:bg-primary/[0.02] transition-all duration-200"
+                      onClick={() => document.getElementById('restore-file-input')?.click()}
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {restoreFile ? (
+                          <>
+                            <p className="text-sm font-medium truncate">{restoreFile.name}</p>
+                            <p className="text-xs text-muted-foreground">{(restoreFile.size / 1024).toFixed(1)} KB</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm font-medium">Klik untuk memilih file</p>
+                            <p className="text-xs text-muted-foreground">Format .db (SQLite database backup)</p>
+                          </>
+                        )}
+                      </div>
+                      {restoreFile && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0 h-8 w-8 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRestoreFile(null)
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Restore Actions */}
+                <div className="flex items-center justify-between rounded-xl border border-border/50 p-4">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      'h-2 w-2 rounded-full',
+                      restoreFile ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+                    )} />
+                    <span className="text-xs text-muted-foreground">
+                      {restoreFile ? 'File siap untuk di-restore' : 'Pilih file backup terlebih dahulu'}
+                    </span>
                   </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm">
-                        <Upload className="h-4 w-4 mr-1" /> Restore
+                      <Button variant="destructive" size="sm" disabled={!restoreFile || isRestoring} className="rounded-xl">
+                        {isRestoring ? (
+                          <>
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-1.5" />
+                            Restoring...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4 mr-1.5" /> Restore Database
+                          </>
+                        )}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Konfirmasi Restore Database</AlertDialogTitle>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-destructive/10">
+                            <Shield className="h-4 w-4 text-destructive" />
+                          </div>
+                          Konfirmasi Restore Database
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
                           Tindakan ini akan menimpa seluruh database yang ada. Data yang sudah ada akan hilang dan diganti dengan data dari file backup. Tindakan ini TIDAK DAPAT dibatalkan.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
-                      <div className="space-y-2">
-                        <Label>Pilih File Backup (.db)</Label>
-                        <Input type="file" accept=".db" />
-                      </div>
+                      {restoreFile && (
+                        <div className="rounded-lg border bg-muted/50 p-3">
+                          <p className="text-xs text-muted-foreground">File yang akan di-restore:</p>
+                          <p className="text-sm font-medium mt-0.5">{restoreFile.name}</p>
+                          <p className="text-xs text-muted-foreground">{(restoreFile.size / 1024).toFixed(1)} KB</p>
+                        </div>
+                      )}
                       <AlertDialogFooter>
                         <AlertDialogCancel>Batal</AlertDialogCancel>
-                        <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90">
-                          Restore Database
+                        <AlertDialogAction
+                          className="bg-destructive text-white hover:bg-destructive/90"
+                          onClick={handleRestore}
+                        >
+                          Ya, Restore Database
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -751,7 +1448,7 @@ export function PengaturanPage() {
         {/* Tab: Pergantian Tahun */}
         <TabsContent value="tahun" className="mt-4">
           <div className="space-y-6">
-            <Card>
+            <Card className="animate-fade-in animate-stagger-1 border border-border/50 shadow-sm rounded-2xl card-hover">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> Pergantian Tahun Anggaran</CardTitle>
                 <CardDescription>Kelola pergantian tahun dan inisialisasi anggaran baru</CardDescription>
@@ -814,21 +1511,21 @@ export function PengaturanPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="animate-fade-in animate-stagger-2 border border-border/50 shadow-sm rounded-2xl card-hover">
               <CardHeader>
                 <CardTitle>Informasi Tahun {localSettings.tahun_aktif || new Date().getFullYear()}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg border p-3 text-center">
+                  <div className="rounded-xl border border-border/50 p-3 text-center bg-muted/30">
                     <p className="text-xs text-muted-foreground">Kendaraan Terdaftar</p>
                     <p className="text-2xl font-bold">{backupInfo?.stats?.vehicles || 0}</p>
                   </div>
-                  <div className="rounded-lg border p-3 text-center">
+                  <div className="rounded-xl border border-border/50 p-3 text-center bg-muted/30">
                     <p className="text-xs text-muted-foreground">Service Dilakukan</p>
                     <p className="text-2xl font-bold">{backupInfo?.stats?.services || 0}</p>
                   </div>
-                  <div className="rounded-lg border p-3 text-center">
+                  <div className="rounded-xl border border-border/50 p-3 text-center bg-muted/30">
                     <p className="text-xs text-muted-foreground">Bengkel Aktif</p>
                     <p className="text-2xl font-bold">{backupInfo?.stats?.workshops || 0}</p>
                   </div>

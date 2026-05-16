@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useAuthStore } from '@/store/auth'
 import { useNavigationStore } from '@/store/navigation'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { AppHeader } from '@/components/layout/app-header'
+import { DynamicFavicon } from '@/components/layout/dynamic-favicon'
+import { MobileNavbar } from '@/components/layout/mobile-navbar'
 import { cn } from '@/lib/utils'
 import { Shield, Loader2 } from 'lucide-react'
 
@@ -65,6 +68,14 @@ const PengaturanPage = dynamic(() => import('@/components/pengaturan/pengaturan-
   loading: () => <PageLoader />,
   ssr: false
 })
+const BengkelProfilePage = dynamic(() => import('@/components/bengkel/bengkel-profile').then(m => ({ default: m.BengkelProfile })), {
+  loading: () => <PageLoader />,
+  ssr: false
+})
+const SetupWizard = dynamic(() => import('@/components/setup/setup-wizard').then(m => ({ default: m.SetupWizard })), {
+  loading: () => <PageLoader />,
+  ssr: false
+})
 
 function PageRenderer() {
   const currentPage = useNavigationStore((s) => s.currentPage)
@@ -80,6 +91,7 @@ function PageRenderer() {
     case 'laporan': return <LaporanPage />
     case 'notifikasi': return <NotifikasiPage />
     case 'pengaturan': return <PengaturanPage />
+    case 'profil': return <BengkelProfilePage />
     default: return <DashboardPage />
   }
 }
@@ -103,13 +115,55 @@ function AuthLoadingScreen() {
 export default function Home() {
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore()
   const sidebarOpen = useNavigationStore((s) => s.sidebarOpen)
+  const isMobile = useIsMobile()
   const [initialCheck, setInitialCheck] = useState(false)
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
 
   useEffect(() => {
-    checkAuth().finally(() => setInitialCheck(true))
+    async function checkSetupAndAuth() {
+      try {
+        // Check if setup is needed first
+        const setupRes = await fetch('/api/setup')
+        if (setupRes.ok) {
+          const setupData = await setupRes.json()
+          if (setupData.needsSetup) {
+            setNeedsSetup(true)
+            setInitialCheck(true)
+            // Don't check auth since setup is needed — no users exist yet
+            // But we must set isLoading to false so the loading screen goes away
+            useAuthStore.setState({ isLoading: false })
+            return
+          }
+        }
+        setNeedsSetup(false)
+      } catch {
+        setNeedsSetup(false)
+      }
+
+      // Then check auth
+      checkAuth().finally(() => setInitialCheck(true))
+    }
+
+    checkSetupAndAuth()
   }, [checkAuth])
 
-  // Show loading screen during initial auth check
+  // Show setup wizard if first-time setup is needed (takes priority over auth check)
+  if (needsSetup && initialCheck) {
+    return (
+      <SetupWizard
+        onComplete={async () => {
+          setNeedsSetup(false)
+          // After setup completes, check auth so login page shows properly
+          useAuthStore.setState({ isLoading: false })
+          // Trigger auth check to ensure fresh state
+          setInitialCheck(false)
+          checkAuth().finally(() => setInitialCheck(true))
+        }}
+      />
+    )
+  }
+
+  // Show loading screen during initial check
   if (!initialCheck || isLoading) {
     return <AuthLoadingScreen />
   }
@@ -121,20 +175,34 @@ export default function Home() {
 
   // Authenticated — show main app
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen flex flex-col md:flex-row bg-background">
+      <DynamicFavicon />
       <AppSidebar />
       <div className={cn(
-        'flex-1 flex flex-col transition-all duration-300',
-        sidebarOpen ? 'ml-64' : 'ml-[68px]'
+        'flex-1 flex flex-col min-h-screen transition-all duration-300',
+        // On mobile: no margin (sidebar is a drawer overlay)
+        // On desktop: margin based on sidebar state
+        isMobile ? 'ml-0' : (sidebarOpen ? 'md:ml-64' : 'md:ml-[68px]')
       )}>
         <AppHeader />
-        <main className="flex-1 p-6">
+        <main
+          className={cn(
+            'flex-1 p-3 sm:p-4 md:p-6',
+            // Add bottom padding on mobile to account for the bottom navbar
+            isMobile ? 'pb-20' : ''
+          )}
+        >
           <PageRenderer />
         </main>
-        <footer className="border-t border-border/50 py-3 px-6 text-center text-xs text-muted-foreground">
-          © 2025 BKAD - Sistem Informasi Service Kendaraan Operasional Dinas
-        </footer>
+        {/* Hide footer on mobile since bottom nav replaces it */}
+        {!isMobile && (
+          <footer className="border-t border-border/50 py-3 px-3 sm:px-4 md:px-6 text-center text-xs text-muted-foreground mt-auto">
+            © 2025 BKAD - Sistem Informasi Service Kendaraan Operasional Dinas
+          </footer>
+        )}
       </div>
+      {/* Mobile bottom navbar - only visible on mobile */}
+      <MobileNavbar />
     </div>
   )
 }

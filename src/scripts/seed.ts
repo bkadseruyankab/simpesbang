@@ -689,18 +689,38 @@ async function main() {
 
   // ==================== SPARE PARTS ====================
   const spareParts = [
-    { namaSukuCadang: 'Oli Mesin Toyota 5W-30', qty: 50, hargaSatuan: 350000, supplier: 'PT. Toyota Astra Motor', stok: 50, keterangan: 'Oli genuine Toyota 4L', isActive: true },
-    { namaSukuCadang: 'Kampas Rem Depan Honda', qty: 30, hargaSatuan: 250000, supplier: 'PT. Astra Honda Motor', stok: 30, keterangan: 'Original Honda', isActive: true },
-    { namaSukuCadang: 'Ban IRC NR91 90/90-14', qty: 20, hargaSatuan: 350000, supplier: 'PT. IRC Indonesia', stok: 20, keterangan: 'Ban motor depan/belakang', isActive: true },
-    { namaSukuCadang: 'Aki GS Astra MF 12V 5Ah', qty: 15, hargaSatuan: 450000, supplier: 'PT. GS Astra', stok: 15, keterangan: 'Aki motor maintenance free', isActive: true },
-    { namaSukuCadang: 'Filter Udara Toyota Avanza', qty: 25, hargaSatuan: 200000, supplier: 'PT. Denso Indonesia', stok: 25, keterangan: 'Filter udara ori Denso', isActive: true },
+    // Bengkel Motor Jaya Makmur (workshop1)
+    { namaSukuCadang: 'Kompressor AC Denso', qty: 8, hargaSatuan: 2800000, supplier: 'PT. Denso Indonesia', stok: 8, keterangan: 'Kompressor AC untuk Toyota Innova', isActive: true, bengkelId: workshop1.id },
+    { namaSukuCadang: 'Gasket Set Mesin Daihatsu', qty: 5, hargaSatuan: 1500000, supplier: 'PT. Astra Daihatsu Motor', stok: 5, keterangan: 'Full gasket set Gran Max', isActive: true, bengkelId: workshop1.id },
+    { namaSukuCadang: 'Ring Piston Oversize', qty: 12, hargaSatuan: 350000, supplier: 'PT. Astra Daihatsu Motor', stok: 12, keterangan: 'Oversize 0.25', isActive: true, bengkelId: workshop1.id },
+    { namaSukuCadang: 'Klep & Valve Seal', qty: 6, hargaSatuan: 800000, supplier: 'PT. Astra Daihatsu Motor', stok: 6, keterangan: 'Set klep + seal', isActive: true, bengkelId: workshop1.id },
+    { namaSukuCadang: 'Freon R134a', qty: 20, hargaSatuan: 200000, supplier: 'PT. Chemindo', stok: 20, keterangan: 'Isi ulang freon AC', isActive: true, bengkelId: workshop1.id },
+
+    // Auto Service Nusantara (workshop2)
+    { namaSukuCadang: 'Oli Mesin Toyota 5W-30', qty: 50, hargaSatuan: 350000, supplier: 'PT. Toyota Astra Motor', stok: 50, keterangan: 'Oli genuine Toyota 4L', isActive: true, bengkelId: workshop2.id },
+    { namaSukuCadang: 'Filter Oli Denso', qty: 40, hargaSatuan: 150000, supplier: 'PT. Denso Indonesia', stok: 40, keterangan: 'Filter oli universal', isActive: true, bengkelId: workshop2.id },
+    { namaSukuCadang: 'Filter Udara Toyota Avanza', qty: 25, hargaSatuan: 200000, supplier: 'PT. Denso Indonesia', stok: 25, keterangan: 'Filter udara ori Denso', isActive: true, bengkelId: workshop2.id },
+    { namaSukuCadang: 'Radiator Toyota Avanza', qty: 3, hargaSatuan: 2500000, supplier: 'PT. Toyota Astra Motor', stok: 3, keterangan: 'Radiator original Toyota', isActive: true, bengkelId: workshop2.id },
+    { namaSukuCadang: 'Coolant Toyota Long Life', qty: 30, hargaSatuan: 150000, supplier: 'PT. Toyota Astra Motor', stok: 30, keterangan: 'Coolant radiator', isActive: true, bengkelId: workshop2.id },
+    { namaSukuCadang: 'Oli Mesin Mitsubishi', qty: 30, hargaSatuan: 380000, supplier: 'PT. Mitsubishi Motors', stok: 30, keterangan: 'Mitsubishi Genuine Oil', isActive: true, bengkelId: workshop2.id },
+    { namaSukuCadang: 'Thermostat', qty: 10, hargaSatuan: 450000, supplier: 'PT. Denso Indonesia', stok: 10, keterangan: 'Thermostat universal', isActive: true, bengkelId: workshop2.id },
+
+    // Bengkel Resmi Honda Tunas Dwipa (workshop3)
+    { namaSukuCadang: 'Kampas Rem Depan Honda', qty: 30, hargaSatuan: 250000, supplier: 'PT. Astra Honda Motor', stok: 30, keterangan: 'Original Honda', isActive: true, bengkelId: workshop3.id },
+    { namaSukuCadang: 'Ban IRC NR91 90/90-14', qty: 20, hargaSatuan: 350000, supplier: 'PT. IRC Indonesia', stok: 20, keterangan: 'Ban motor depan/belakang', isActive: true, bengkelId: workshop3.id },
+    { namaSukuCadang: 'Aki GS Astra MF 12V 5Ah', qty: 15, hargaSatuan: 450000, supplier: 'PT. GS Astra', stok: 15, keterangan: 'Aki motor maintenance free', isActive: true, bengkelId: workshop3.id },
+    { namaSukuCadang: 'Starter Motor Honda', qty: 8, hargaSatuan: 650000, supplier: 'PT. Astra Honda Motor', stok: 8, keterangan: 'Starter motor Supra/Beat', isActive: true, bengkelId: workshop3.id },
+    { namaSukuCadang: 'Rantai 428H', qty: 15, hargaSatuan: 200000, supplier: 'PT. Indak', stok: 15, keterangan: 'Rantai motor Honda', isActive: true, bengkelId: workshop3.id },
+    { namaSukuCadang: 'Disc Brake Depan', qty: 10, hargaSatuan: 450000, supplier: 'PT. Astra Honda Motor', stok: 10, keterangan: 'Disc brake depan Honda', isActive: true, bengkelId: workshop3.id },
+    { namaSukuCadang: 'Oli Yamalube', qty: 25, hargaSatuan: 180000, supplier: 'PT. Yamaha Indonesia', stok: 25, keterangan: 'Oli mesin Yamaha', isActive: true, bengkelId: workshop3.id },
+    { namaSukuCadang: 'Busi NGK', qty: 50, hargaSatuan: 45000, supplier: 'PT. NGK Busi Indonesia', stok: 50, keterangan: 'Busi motor universal', isActive: true, bengkelId: workshop3.id },
   ]
 
   for (const sp of spareParts) {
     await prisma.sparePart.create({ data: sp })
   }
 
-  console.log('✅ 5 Suku Cadang dibuat')
+  console.log('✅ 20 Suku Cadang dibuat (per-bengkel)')
 
   // ==================== NOTIFICATIONS ====================
   const notifications = [

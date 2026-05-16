@@ -10,6 +10,9 @@ export async function GET(
     const sparePart = await db.sparePart.findUnique({
       where: { id },
       include: {
+        bengkel: {
+          select: { id: true, namaBengkel: true },
+        },
         serviceSpareParts: {
           include: {
             service: {
@@ -17,15 +20,15 @@ export async function GET(
                 nomorService: true,
                 statusService: true,
                 vehicle: {
-                  select: { nomorPolisi: true }
-                }
-              }
-            }
+                  select: { nomorPolisi: true },
+                },
+              },
+            },
           },
           orderBy: { service: { createdAt: 'desc' } },
           take: 10,
-        }
-      }
+        },
+      },
     })
 
     if (!sparePart) {
@@ -46,11 +49,19 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { namaSukuCadang, qty, hargaSatuan, supplier, stok, keterangan, isActive } = body
+    const { namaSukuCadang, qty, hargaSatuan, supplier, stok, keterangan, isActive, bengkelId } = body
 
     const existing = await db.sparePart.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Suku cadang tidak ditemukan' }, { status: 404 })
+    }
+
+    // If bengkelId is being changed, verify the new bengkel exists
+    if (bengkelId && bengkelId !== existing.bengkelId) {
+      const bengkel = await db.workshop.findUnique({ where: { id: bengkelId } })
+      if (!bengkel) {
+        return NextResponse.json({ error: 'Bengkel tidak ditemukan' }, { status: 404 })
+      }
     }
 
     const sparePart = await db.sparePart.update({
@@ -63,6 +74,12 @@ export async function PUT(
         stok: stok !== undefined ? parseInt(stok) : existing.stok,
         keterangan: keterangan !== undefined ? keterangan : existing.keterangan,
         isActive: isActive !== undefined ? isActive : existing.isActive,
+        bengkelId: bengkelId !== undefined ? bengkelId : existing.bengkelId,
+      },
+      include: {
+        bengkel: {
+          select: { id: true, namaBengkel: true },
+        },
       },
     })
 
@@ -87,7 +104,7 @@ export async function DELETE(
 
     // Check if it's being used in any services
     const usageCount = await db.serviceSparePart.count({
-      where: { sparePartId: id }
+      where: { sparePartId: id },
     })
 
     if (usageCount > 0) {

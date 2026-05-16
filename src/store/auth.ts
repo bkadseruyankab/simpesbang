@@ -105,10 +105,18 @@ export const useAuthStore = create<AuthState>((set) => ({
               set({ user, isAuthenticated: true, isLoading: false })
               return
             }
+          } else if (res.status === 404 || res.status === 403) {
+            // User no longer exists or is deactivated — clear stale session
+            removeUserFromStorage()
+            set({ user: null, isAuthenticated: false, isLoading: false })
+            return
           }
         } catch {
-          // API unavailable, use stored user
+          // API unavailable, use stored user (offline tolerance)
+          set({ user: storedUser, isAuthenticated: true, isLoading: false })
+          return
         }
+        // API returned non-OK but not 404/403 — keep stored user as fallback
         set({ user: storedUser, isAuthenticated: true, isLoading: false })
         return
       }

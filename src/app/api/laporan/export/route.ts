@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch data with same filters as GET
     const where: any = { isDeleted: false }
-    const { type, year, month, dateFrom, dateTo, vehicleId, bengkelId, jenisKendaraan, statusService, jenisService } = filters || {}
+    const { type, year, month, dateFrom, dateTo, vehicleId, bengkelId, jenisKendaraan, statusService, jenisService, skpdBidang } = filters || {}
 
     const yearNum = parseInt(year || new Date().getFullYear().toString())
     if (type === 'tahunan') {
@@ -33,10 +33,11 @@ export async function POST(request: NextRequest) {
     if (statusService) where.statusService = statusService
     if (jenisService) where.jenisService = jenisService
     if (jenisKendaraan) where.vehicle = { jenisKendaraan }
+    if (skpdBidang) where.vehicle = { ...(where.vehicle || {}), skpdBidang: { contains: skpdBidang } }
 
     const services = await db.service.findMany({
       where,
-      include: { vehicle: true, bengkel: true, items: true },
+      include: { vehicle: true, bengkel: true, items: { include: { photos: true } } },
       orderBy: { tanggalService: 'desc' },
     })
 
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     if (format === 'excel' || format === 'csv') {
       // Generate CSV with Jenis Kendaraan column
-      const headers = ['No', 'Nomor Service', 'Tanggal', 'Nomor Polisi', 'Merk/Type', 'Jenis Kendaraan', 'Jenis Service', 'Bengkel', 'Kilometer', 'Estimasi Biaya', 'Total Biaya', 'Status']
+      const headers = ['No', 'Nomor Service', 'Tanggal', 'Nomor Polisi', 'Merk/Type', 'Jenis Kendaraan', 'SKPD/Bidang', 'Jenis Service', 'Bengkel', 'Kilometer', 'Estimasi Biaya', 'Total Biaya', 'Status']
       const rows = services.map((s, i) => [
         i + 1,
         s.nomorService,
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
         s.vehicle.nomorPolisi,
         `${s.vehicle.merk} ${s.vehicle.type}`,
         s.vehicle.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4',
+        s.vehicle.skpdBidang || '-',
         s.jenisService,
         s.bengkel.namaBengkel,
         s.kilometerService,
@@ -291,6 +293,7 @@ export async function POST(request: NextRequest) {
         <th>Kendaraan</th>
         <th>Jenis</th>
         <th>Jenis Kendaraan</th>
+        <th>SKPD/Bidang</th>
         <th>Bengkel</th>
         <th class="text-right">Biaya</th>
         <th>Status</th>
@@ -306,12 +309,13 @@ export async function POST(request: NextRequest) {
         <td>${s.vehicle.merk} ${s.vehicle.type}</td>
         <td>${s.jenisService}</td>
         <td>${s.vehicle.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}</td>
+        <td>${s.vehicle.skpdBidang || '-'}</td>
         <td>${s.bengkel.namaBengkel}</td>
         <td class="text-right">Rp ${s.totalBiaya.toLocaleString('id-ID')}</td>
         <td>${s.statusService}</td>
       </tr>
       `).join('')}
-      ${services.length === 0 ? '<tr><td colspan="10" class="text-center" style="padding: 20px;">Tidak ada data service</td></tr>' : ''}
+      ${services.length === 0 ? '<tr><td colspan="11" class="text-center" style="padding: 20px;">Tidak ada data service</td></tr>' : ''}
     </tbody>
   </table>
 

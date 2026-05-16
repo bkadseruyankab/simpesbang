@@ -37,7 +37,11 @@ export async function GET(request: NextRequest) {
       include: {
         vehicle: true,
         bengkel: true,
-        items: true,
+        items: {
+          include: {
+            photos: true,
+          },
+        },
         spareParts: {
           include: {
             sparePart: true,

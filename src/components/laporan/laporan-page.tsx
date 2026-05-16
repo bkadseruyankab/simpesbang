@@ -375,8 +375,8 @@ export function LaporanPage() {
   /* KOP SURAT */
   .kop-surat { text-align: center; padding-bottom: 8px; position: relative; }
   .kop-content { display: flex; align-items: center; justify-content: center; gap: 14px; }
-  .kop-logo { width: 72px; height: 72px; border: 2px solid #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .kop-logo-inner { width: 60px; height: 60px; border: 1.5px solid #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
+  .kop-logo { width: 72px; height: 72px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .kop-logo-inner { width: 60px; height: 60px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
   .kop-text { text-align: center; }
   .kop-line1 { font-size: 11pt; font-weight: normal; letter-spacing: 1px; }
   .kop-line2 { font-size: 14pt; font-weight: bold; letter-spacing: 2px; margin: 1px 0; }
@@ -440,6 +440,7 @@ export function LaporanPage() {
   .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
   .sig-title { font-size: 8.5pt; font-weight: bold; }
   .sig-nip { font-size: 8pt; color: #555; }
+  .sig-tte-label { font-size: 7.5pt; color: #888; font-style: italic; }
 
   /* PHOTOS */
   .photo-section { margin: 14px 0; }
@@ -470,7 +471,7 @@ export function LaporanPage() {
   <div class="kop-surat">
     <div class="kop-content">
       <div class="kop-logo">
-        ${settings.app_logo ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:50%;object-fit:contain;" />` : `<div class="kop-logo-inner">LOGO</div>`}
+        ${settings.app_logo ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:4px;object-fit:contain;" />` : `<div class="kop-logo-inner">LOGO</div>`}
       </div>
       <div class="kop-text">
         <div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div>
@@ -650,10 +651,14 @@ export function LaporanPage() {
     </div>
     <div class="sig-block">
       <div class="sig-date">Kabupaten/Kota, ${printDate}</div>
-      ${kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}
+      ${settings.app_tte_image 
+        ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>`
+        : kepalaSignature 
+          ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>`
+          : `<div style="height:60px;"></div>`}
       <div class="sig-name">${settings.app_kepala_nama || '________________________'}</div>
       <div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
-      <div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div>
+      ${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}
     </div>
   </div>
   ` : ''}
@@ -704,7 +709,7 @@ export function LaporanPage() {
 
     // Build KOP SURAT HTML
     const kopLogoHtml = settings.app_logo
-      ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:50%;object-fit:contain;" />`
+      ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:4px;object-fit:contain;" />`
       : `<div class="kop-logo-inner">LOGO</div>`
     const kopHtml = `<div class="kop-surat"><div class="kop-content"><div class="kop-logo">${kopLogoHtml}</div><div class="kop-text"><div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div><div class="kop-line2">${settings.app_kop_line2 || 'BADAN KEUANGAN DAN ASET DAERAH'}</div><div class="kop-line3">${settings.app_kop_line3 || 'UNIT LAYANAN PENGADAAN'}</div><div class="kop-address">${settings.app_address || 'Jl. Merdeka No. 1, Kota Selatan | Telp. (021) 123-4567 | Email: bkad@pemda.go.id'}</div></div></div><div class="kop-border"><div class="kop-border-inner"></div></div></div>`
 
@@ -722,7 +727,7 @@ export function LaporanPage() {
 
     // Build signature HTML
     const sigHtml = printItemsSignature
-      ? `<div class="signature-section"><div class="sig-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin)}" alt="QR Code Verifikasi" style="width:120px;height:120px;border:1px solid #ccc;border-radius:4px;" /><div style="font-size:7.5pt;color:#555;margin-top:4px;line-height:1.3;">Scan untuk verifikasi dokumen</div></div><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div>${kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div><div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div></div></div>`
+      ? `<div class="signature-section"><div class="sig-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin)}" alt="QR Code Verifikasi" style="width:120px;height:120px;border:1px solid #ccc;border-radius:4px;" /><div style="font-size:7.5pt;color:#555;margin-top:4px;line-height:1.3;">Scan untuk verifikasi dokumen</div></div><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div>${settings.app_tte_image ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>` : kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}</div></div>`
       : ''
 
     const html = `<!DOCTYPE html>
@@ -738,8 +743,8 @@ export function LaporanPage() {
   .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 0; position: relative; }
   .kop-surat { text-align: center; padding-bottom: 8px; position: relative; }
   .kop-content { display: flex; align-items: center; justify-content: center; gap: 14px; }
-  .kop-logo { width: 72px; height: 72px; border: 2px solid #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .kop-logo-inner { width: 60px; height: 60px; border: 1.5px solid #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
+  .kop-logo { width: 72px; height: 72px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .kop-logo-inner { width: 60px; height: 60px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
   .kop-text { text-align: center; }
   .kop-line1 { font-size: 11pt; font-weight: normal; letter-spacing: 1px; }
   .kop-line2 { font-size: 14pt; font-weight: bold; letter-spacing: 2px; margin: 1px 0; }
@@ -769,6 +774,7 @@ export function LaporanPage() {
   .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
   .sig-title { font-size: 8.5pt; font-weight: bold; }
   .sig-nip { font-size: 8pt; color: #555; }
+  .sig-tte-label { font-size: 7.5pt; color: #888; font-style: italic; }
   .doc-footer { margin-top: 30px; padding-top: 8px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; font-size: 7.5pt; color: #888; }
   @media print { body { margin: 0; padding: 0; background: #fff; } .page { margin: 0; width: 100%; } }
 </style>

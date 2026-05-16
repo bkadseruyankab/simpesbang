@@ -355,3 +355,203 @@ Stage Summary:
 - Sekda signature removed from all prints
 - QR verification codes added to all print documents
 - Files modified: pengaturan-page.tsx, kendaraan-page.tsx, bengkel-profile.tsx, laporan-page.tsx, riwayat-page.tsx, service-page.tsx
+
+---
+Task ID: 7
+Agent: Logo Circle Removal Agent
+Task: Remove circle (border + border-radius:50%) from print logos in all Cetak documents
+
+Work Log:
+- Identified 3 files with circular logo styling in print HTML template strings
+- laporan-page.tsx: 6 locations (2 CSS classes × 2 print functions + 2 inline img styles)
+- riwayat-page.tsx: 3 locations (2 CSS classes + 1 inline img style)
+- service-page.tsx: 3 locations (1 inline img style + 2 CSS classes)
+
+Changes applied using replace_all for each pattern:
+1. `.kop-logo` border: `border: 2px solid #1a1a1a; border-radius: 50%;` → `border: none; border-radius: 4px;`
+2. `.kop-logo-inner` border: `border: 1.5px solid #1a1a1a; border-radius: 50%;` → `border: none; border-radius: 4px;`
+3. Inline img style: `border-radius:50%;` → `border-radius:4px;`
+
+Verification:
+- Grepped all *-page.tsx files for `border-radius: 50%` — remaining matches are only for `.timeline-dot` and `.summary-card-icon` (intentionally circular, not logo-related)
+- Grepped for `border-radius:50%` (inline) — 0 matches (all converted)
+- Grepped for `border: 2px solid #1a1a1a` — 0 matches (all converted)
+
+Stage Summary:
+- 3 files modified: laporan-page.tsx, riwayat-page.tsx, service-page.tsx
+- All print logos now display as square with subtle 4px border-radius instead of circular
+- Circular borders removed from both .kop-logo and .kop-logo-inner CSS classes
+- Inline border-radius on img tags updated from 50% to 4px
+- No changes to non-logo circular elements (timeline dots, summary card icons)
+
+---
+Task ID: 4+5
+Agent: TTE API Developer
+Task: Add TTE image upload API endpoint
+
+Work Log:
+- Read existing upload route (`/api/pengaturan/upload/route.ts`), blob-store utility, schema, and settings API to understand patterns
+- Modified upload route to support TTE image upload alongside existing logo/favicon:
+  1. Added `TTE_ALLOWED_TYPES` (PNG, JPG, JPEG, SVG) and `TTE_MAX_SIZE` (2MB) constants
+  2. Added `VALID_TYPES` array and `UploadType` type for cleaner type validation
+  3. Added `tte: 'app_tte_image'` to `SETTING_KEY_MAP`
+  4. Updated POST handler: type validation now uses `VALID_TYPES.includes()`, MIME/size validation routes to TTE constants, context='logo' used for compression skip (TTE images may have transparency)
+  5. Updated DELETE handler: same `VALID_TYPES.includes()` validation, deletes blob and clears SystemSetting
+- Added `app_tte_image: ''` default to settings GET endpoint (`/api/pengaturan/route.ts`) so it appears in settings even before upload
+- Blob storage: `storeBlobFile('app_tte_image', file, 'logo')` stores file in BlobFile table with key `app_tte_image` and saves path to SystemSetting `app_tte_image`
+- TTE image served at `/api/file/blob/app_tte_image` (existing blob file serving route handles this automatically)
+- TypeScript compilation: 0 new errors in modified files
+
+Stage Summary:
+- 2 files modified: upload/route.ts, pengaturan/route.ts
+- TTE image upload: POST /api/pengaturan/upload with FormData {file, type:'tte'}
+- TTE image delete: DELETE /api/pengaturan/upload?type=tte
+- Validation: PNG/JPG/JPEG/SVG only, max 2MB
+- Storage: BlobFile key='app_tte_image', SystemSetting key='app_tte_image', compression skipped (like logos)
+- Print documents can fetch TTE image from `/api/file/blob/app_tte_image` path stored in settings
+
+---
+Task ID: 3-a
+Agent: Riwayat TTE Print Updater
+Task: Update riwayat TTE in prints to use TTE image from settings as primary signature
+
+Work Log:
+- Read riwayat-page.tsx to identify current signature section (lines 400-414)
+- Current signature uses `kepalaSignature` (canvas-drawn base64) and always shows `NIP` line
+- Updated signature image logic to prefer `settings.app_tte_image` over `kepalaSignature`:
+  1. If `settings.app_tte_image` exists: use TTE image with `max-height:70px;max-width:200px`
+  2. Else if `kepalaSignature` exists: use canvas signature with `max-height:55px;max-width:180px`
+  3. Else: empty space placeholder
+- Updated NIP/TTE label conditional:
+  - When TTE image used: shows `.sig-tte-label` with "Tanda Tangan Elektronik" text
+  - When canvas signature or no signature: shows `.sig-nip` with NIP (or empty)
+- Added `.sig-tte-label` CSS class: `font-size: 7.5pt; color: #888; font-style: italic;`
+
+Stage Summary:
+- 1 file modified: riwayat-page.tsx
+- Print signature now prioritizes TTE image from settings (app_tte_image) over canvas signature
+- Added conditional TTE label vs NIP display
+- Added `.sig-tte-label` CSS style for italic grey TTE indicator
+
+---
+Task ID: 3-b
+Agent: Laporan TTE Print Updater
+Task: Update laporan TTE in prints to use TTE image from settings as primary signature
+
+Work Log:
+- Read laporan-page.tsx to identify both print functions and their signature sections
+- handlePrintReport (line ~350): signature section at lines 644-658
+- handlePrintItemsReport (line ~690): signature HTML built at line 724-725
+
+Changes applied:
+
+1. **handlePrintReport signature section** (lines 651-662):
+   - Replaced simple `kepalaSignature` check with 3-tier priority:
+     - First: `settings.app_tte_image` → TTE image from settings (max-height:70px, max-width:200px)
+     - Second: `kepalaSignature` → canvas-drawn signature (max-height:55px, max-width:180px)
+     - Third: empty 60px placeholder
+   - Updated NIP/TTE label conditional:
+     - When TTE image used: shows `.sig-tte-label` with "Tanda Tangan Elektronik"
+     - Otherwise: shows `.sig-nip` with NIP (or empty string)
+
+2. **handlePrintItemsReport signature HTML** (line 725):
+   - Same 3-tier priority for signature image (TTE → canvas → empty)
+   - Same conditional TTE label vs NIP display
+   - Applied to the inline sigHtml template string
+
+3. **CSS additions** (both style sections):
+   - Added `.sig-tte-label { font-size: 7.5pt; color: #888; font-style: italic; }` after `.sig-nip` in both print functions' `<style>` blocks
+
+Stage Summary:
+- 1 file modified: laporan-page.tsx
+- Both print functions (handlePrintReport + handlePrintItemsReport) now prioritize TTE image from settings
+- Added `.sig-tte-label` CSS to both style sections
+- TTE image uses larger display (70px vs 55px) to emphasize electronic signature
+- When TTE is active, shows "Tanda Tangan Elektronik" label instead of NIP
+
+---
+Task ID: 3-c
+Agent: Service TTE Print Updater
+Task: Update service TTE in prints to use TTE image from settings as primary signature
+
+Work Log:
+- Read service-page.tsx to identify signature section in print HTML
+- Found sigHtml at line 1455: currently uses `kepalaSignature` (canvas-drawn base64) and always shows `NIP` line
+- Updated signature image logic to prefer `settings.app_tte_image` over `kepalaSignature`:
+  1. If `settings.app_tte_image` exists: use TTE image with `max-height:70px;max-width:200px`, src = `window.location.origin + settings.app_tte_image`
+  2. Else if `kepalaSignature` exists: use canvas signature with `max-height:55px;max-width:180px`
+  3. Else: empty 60px placeholder div
+- Updated NIP/TTE label conditional:
+  - When TTE image used: shows `.sig-tte-label` div with "Tanda Tangan Elektronik" text
+  - When canvas signature or no signature: shows `.sig-nip` div with NIP (or empty string)
+- Added `.sig-tte-label` CSS class: `font-size: 7.5pt; color: #888; font-style: italic;` after `.sig-nip` in print style section
+
+Stage Summary:
+- 1 file modified: service-page.tsx
+- Print signature now prioritizes TTE image from settings (app_tte_image) over canvas signature
+- Added conditional TTE label vs NIP display
+- Added `.sig-tte-label` CSS style for italic grey TTE indicator
+---
+Task ID: 1
+Agent: Main Agent
+Task: Remove circle/border around logo in all Cetak (print) documents
+
+Work Log:
+- Changed `.kop-logo` CSS in all 3 print files from `border: 2px solid #1a1a1a; border-radius: 50%` to `border: none; border-radius: 4px`
+- Changed `.kop-logo-inner` CSS from `border: 1.5px solid #1a1a1a; border-radius: 50%` to `border: none; border-radius: 4px`
+- Changed `<img>` inline style from `border-radius:50%` to `border-radius:4px` on all logo images
+- Affected files: laporan-page.tsx, riwayat-page.tsx, service-page.tsx
+
+Stage Summary:
+- Logo in all print documents now displays without circular border/frame
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Add TTE (E-Signature) image upload in Pengaturan page
+
+Work Log:
+- Added `tteInputRef` for TTE file input element
+- Added `tteTimestamp` state for cache-busting
+- Extended `handleFileUpload` to support `type: 'tte'`
+- Added `app_tte_image` to identitas section keys for saving
+- Replaced Card 5 (TTE section) with new UI: upload gambar TTE with drag & drop, preview, delete
+- Added canvas signature as alternative option (shown when TTE image exists)
+
+Stage Summary:
+- Pengaturan page now supports TTE image upload (PNG, JPG, SVG max 2MB)
+- TTE image stored as blob file, path saved in SystemSetting `app_tte_image`
+
+---
+Task ID: 3
+Agent: Main Agent (subagents)
+Task: Add TTE signature image to all Cetak (print) documents
+
+Work Log:
+- Updated riwayat-page.tsx print signature: prefer TTE image from settings, fallback to canvas signature
+- Updated laporan-page.tsx both print functions: prefer TTE image, fallback to canvas signature
+- Updated service-page.tsx print signature: prefer TTE image, fallback to canvas signature
+- Added `.sig-tte-label` CSS class in all 3 files for "Tanda Tangan Elektronik" label
+- When TTE image active: shows "Tanda Tangan Elektronik" label instead of NIP
+- When no TTE image: shows NIP as before
+
+Stage Summary:
+- All 3 print documents now use TTE image from settings as primary signature
+- Canvas signature serves as fallback when no TTE image uploaded
+
+---
+Task ID: 4
+Agent: Main Agent (subagent)
+Task: Create API endpoint for TTE image upload/delete
+
+Work Log:
+- Extended `/api/pengaturan/upload/route.ts` with TTE support
+- Added TTE_ALLOWED_TYPES and TTE_MAX_SIZE validation
+- Added `tte` to VALID_TYPES and SETTING_KEY_MAP
+- POST handles `type=tte` with file validation and blob storage
+- DELETE handles `?type=tte` to remove blob and clear setting
+- Added `app_tte_image: ''` to default settings in `/api/pengaturan/route.ts`
+
+Stage Summary:
+- TTE upload/delete API fully functional
+- Blob storage used for TTE images (same as logo/favicon)

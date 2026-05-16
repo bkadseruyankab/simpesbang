@@ -1430,7 +1430,7 @@ export function ServicePage() {
 
                             // Build KOP SURAT HTML
                             const kopLogoHtml = settings.app_logo
-                              ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:50%;object-fit:contain;" />`
+                              ? `<img src="${window.location.origin}${settings.app_logo}" style="width:60px;height:60px;border-radius:4px;object-fit:contain;" />`
                               : `<div class="kop-logo-inner">LOGO</div>`
                             const kopHtml = `<div class="kop-surat"><div class="kop-content"><div class="kop-logo">${kopLogoHtml}</div><div class="kop-text"><div class="kop-line1">${settings.app_kop_line1 || 'PEMERINTAH KABUPATEN/KOTA'}</div><div class="kop-line2">${settings.app_kop_line2 || 'BADAN KEUANGAN DAN ASET DAERAH'}</div><div class="kop-line3">${settings.app_kop_line3 || 'UNIT LAYANAN PENGADAAN'}</div><div class="kop-address">${settings.app_address || 'Jl. Merdeka No. 1, Kota Selatan | Telp. (021) 123-4567 | Email: bkad@pemda.go.id'}</div></div></div><div class="kop-border"><div class="kop-border-inner"></div></div></div>`
 
@@ -1452,7 +1452,7 @@ export function ServicePage() {
                             const docQrData = encodeURIComponent(`${window.location.origin}/api/service/${detail.id}`)
                             const vehicleInfo = `${detail.vehicle?.nomorPolisi || '-'}|${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}|${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}|${detail.vehicle?.nomorRangka || '-'}|${detail.vehicle?.nomorMesin || '-'}`
                             const vehicleQrData = encodeURIComponent(vehicleInfo)
-                            const sigHtml = `<div class="signature-section"><div class="sig-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${docQrData}" alt="QR Code Dokumen" /><div class="sig-qr-label">Scan untuk detail service</div></div><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div>${kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div><div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : 'NIP. ________________________'}</div></div></div><div class="vehicle-qr-section"><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${vehicleQrData}" alt="QR Code Kendaraan" /><div class="vehicle-qr-info"><div class="vehicle-qr-title">QR Code Kendaraan</div><div class="vehicle-qr-detail">${detail.vehicle?.nomorPolisi || '-'} &bull; ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}<br/>${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}${detail.vehicle?.nomorRangka ? ` | Rangka: ${detail.vehicle.nomorRangka}` : ''}${detail.vehicle?.nomorMesin ? ` | Mesin: ${detail.vehicle.nomorMesin}` : ''}</div></div></div>`
+                            const sigHtml = `<div class="signature-section"><div class="sig-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${docQrData}" alt="QR Code Dokumen" /><div class="sig-qr-label">Scan untuk detail service</div></div><div class="sig-block"><div class="sig-date">Kabupaten/Kota, ${printDate}</div>${settings.app_tte_image ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>` : kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-title">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}</div></div><div class="vehicle-qr-section"><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${vehicleQrData}" alt="QR Code Kendaraan" /><div class="vehicle-qr-info"><div class="vehicle-qr-title">QR Code Kendaraan</div><div class="vehicle-qr-detail">${detail.vehicle?.nomorPolisi || '-'} &bull; ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}<br/>${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}${detail.vehicle?.nomorRangka ? ` | Rangka: ${detail.vehicle.nomorRangka}` : ''}${detail.vehicle?.nomorMesin ? ` | Mesin: ${detail.vehicle.nomorMesin}` : ''}</div></div></div>`
 
                             const printHtml = `<!DOCTYPE html>
 <html lang="id">
@@ -1466,8 +1466,8 @@ export function ServicePage() {
   .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 0; position: relative; }
   .kop-surat { text-align: center; padding-bottom: 8px; position: relative; }
   .kop-content { display: flex; align-items: center; justify-content: center; gap: 14px; }
-  .kop-logo { width: 72px; height: 72px; border: 2px solid #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .kop-logo-inner { width: 60px; height: 60px; border: 1.5px solid #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
+  .kop-logo { width: 72px; height: 72px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .kop-logo-inner { width: 60px; height: 60px; border: none; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: bold; color: #1a1a1a; }
   .kop-text { text-align: center; }
   .kop-line1 { font-size: 11pt; font-weight: normal; letter-spacing: 1px; }
   .kop-line2 { font-size: 14pt; font-weight: bold; letter-spacing: 2px; margin: 1px 0; }
@@ -1518,6 +1518,7 @@ export function ServicePage() {
   .sig-name { font-size: 9pt; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; margin-bottom: 2px; font-weight: bold; min-height: 16px; }
   .sig-title { font-size: 8.5pt; font-weight: bold; }
   .sig-nip { font-size: 8pt; color: #555; }
+  .sig-tte-label { font-size: 7.5pt; color: #888; font-style: italic; }
   .vehicle-qr-section { margin-top: 14px; padding: 10px; border: 1px solid #e5e5e5; border-radius: 6px; background: #fafafa; display: flex; align-items: center; gap: 12px; }
   .vehicle-qr-section img { width: 80px; height: 80px; border: 1px solid #ccc; border-radius: 4px; }
   .vehicle-qr-info { font-size: 8.5pt; }

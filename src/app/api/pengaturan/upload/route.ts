@@ -8,9 +8,16 @@ const LOGO_MAX_SIZE = 2 * 1024 * 1024 // 2MB
 const FAVICON_ALLOWED_TYPES = ['image/x-icon', 'image/png', 'image/svg+xml', 'image/webp']
 const FAVICON_MAX_SIZE = 1 * 1024 * 1024 // 1MB
 
+const TTE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml']
+const TTE_MAX_SIZE = 2 * 1024 * 1024 // 2MB
+
+const VALID_TYPES = ['logo', 'favicon', 'tte'] as const
+type UploadType = (typeof VALID_TYPES)[number]
+
 const SETTING_KEY_MAP: Record<string, string> = {
   logo: 'app_logo',
   favicon: 'app_favicon',
+  tte: 'app_tte_image',
 }
 
 /**
@@ -37,9 +44,9 @@ export async function POST(request: NextRequest) {
     const type = formData.get('type') as string | null
 
     // Validate type
-    if (!type || (type !== 'logo' && type !== 'favicon')) {
+    if (!type || !VALID_TYPES.includes(type as UploadType)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid type. Must be "logo" or "favicon".' },
+        { success: false, error: `Invalid type. Must be one of: ${VALID_TYPES.join(', ')}.` },
         { status: 400 }
       )
     }
@@ -53,8 +60,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate MIME type and size based on type
-    const allowedTypes = type === 'logo' ? LOGO_ALLOWED_TYPES : FAVICON_ALLOWED_TYPES
-    const maxSize = type === 'logo' ? LOGO_MAX_SIZE : FAVICON_MAX_SIZE
+    const allowedTypes = type === 'logo'
+      ? LOGO_ALLOWED_TYPES
+      : type === 'favicon'
+        ? FAVICON_ALLOWED_TYPES
+        : TTE_ALLOWED_TYPES
+    const maxSize = type === 'logo'
+      ? LOGO_MAX_SIZE
+      : type === 'favicon'
+        ? FAVICON_MAX_SIZE
+        : TTE_MAX_SIZE
 
     // Try to detect MIME type: first from file.type, then from file extension
     let mimeType = file.type
@@ -85,7 +100,8 @@ export async function POST(request: NextRequest) {
 
     // Store as blob file in database (with compression for non-SVG)
     const settingKey = SETTING_KEY_MAP[type]
-    const context = type === 'logo' ? 'logo' : 'favicon'
+    // TTE images may have transparency like logos, so skip compression
+    const context: 'logo' | 'favicon' | 'other' = type === 'logo' || type === 'tte' ? 'logo' : type === 'favicon' ? 'favicon' : 'other'
 
     // Create a new File with the correct MIME type if we detected it from extension
     const fileToStore = mimeType !== file.type
@@ -113,17 +129,17 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * DELETE /api/pengaturan/upload?type=logo|favicon
- * Remove a logo or favicon blob file
+ * DELETE /api/pengaturan/upload?type=logo|favicon|tte
+ * Remove a logo, favicon, or TTE image blob file
  */
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
 
-    if (!type || (type !== 'logo' && type !== 'favicon')) {
+    if (!type || !VALID_TYPES.includes(type as UploadType)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid type. Must be "logo" or "favicon".' },
+        { success: false, error: `Invalid type. Must be one of: ${VALID_TYPES.join(', ')}.` },
         { status: 400 }
       )
     }

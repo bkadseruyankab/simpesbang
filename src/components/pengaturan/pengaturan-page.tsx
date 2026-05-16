@@ -73,10 +73,12 @@ export function PengaturanPage() {
   // Refs for file inputs
   const logoInputRef = useRef<HTMLInputElement>(null)
   const faviconInputRef = useRef<HTMLInputElement>(null)
+  const tteInputRef = useRef<HTMLInputElement>(null)
 
-  // Cache-busting timestamp for logo/favicon
+  // Cache-busting timestamp for logo/favicon/tte
   const [logoTimestamp, setLogoTimestamp] = useState(Date.now())
   const [faviconTimestamp, setFaviconTimestamp] = useState(Date.now())
+  const [tteTimestamp, setTteTimestamp] = useState(Date.now())
 
   // Fetch settings
   const { data: settings = {}, isLoading: loadingSettings } = useQuery({
@@ -538,7 +540,7 @@ export function PengaturanPage() {
       umum: ['nama_instansi', 'tahun_aktif', 'nomor_surat_otomatis', 'format_nomor_surat', 'bengkel_can_create_service'],
       email: ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from_email', 'fonnte_api_key', 'fonnte_admin_phone',
         'notif_service_diajukan', 'notif_service_disetujui', 'notif_service_ditolak', 'notif_service_selesai', 'notif_anggaran_warning'],
-      identitas: ['app_name', 'app_short_name', 'app_description', 'app_instansi', 'app_address', 'app_phone', 'app_email', 'app_logo', 'app_favicon', 'app_kop_line1', 'app_kop_line2', 'app_kop_line3', 'app_kepala_nama', 'app_kepala_nip', 'app_kepala_jabatan', 'app_sekda_nama', 'app_sekda_nip'],
+      identitas: ['app_name', 'app_short_name', 'app_description', 'app_instansi', 'app_address', 'app_phone', 'app_email', 'app_logo', 'app_favicon', 'app_tte_image', 'app_kop_line1', 'app_kop_line2', 'app_kop_line3', 'app_kepala_nama', 'app_kepala_nip', 'app_kepala_jabatan', 'app_sekda_nama', 'app_sekda_nip'],
     }
     const keys = sectionKeys[section] || []
     const updateData: Record<string, string> = {}
@@ -557,7 +559,7 @@ export function PengaturanPage() {
     updateSettings.mutate(updateData)
   }
 
-  const handleFileUpload = async (file: File, type: 'logo' | 'favicon') => {
+  const handleFileUpload = async (file: File, type: 'logo' | 'favicon' | 'tte') => {
     try {
       toast.loading(`Mengupload ${type}...`, { id: `upload-${type}` })
       const formData = new FormData()
@@ -578,10 +580,12 @@ export function PengaturanPage() {
       setLocalSettings(s => ({ ...s, [data.key]: cacheBustedPath }))
       // Update timestamp state for immediate visual refresh
       if (type === 'logo') setLogoTimestamp(Date.now())
-      else setFaviconTimestamp(Date.now())
+      else if (type === 'favicon') setFaviconTimestamp(Date.now())
+      else if (type === 'tte') setTteTimestamp(Date.now())
       queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
       queryClient.invalidateQueries({ queryKey: ['app-settings-sidebar'] })
-      toast.success(`${type === 'logo' ? 'Logo' : 'Favicon'} berhasil diupload`, { id: `upload-${type}` })
+      const typeLabel = type === 'logo' ? 'Logo' : type === 'favicon' ? 'Favicon' : 'TTE'
+      toast.success(`${typeLabel} berhasil diupload`, { id: `upload-${type}` })
     } catch (err: any) {
       toast.error(err.message || `Gagal mengupload ${type}`, { id: `upload-${type}` })
     }
@@ -1056,84 +1060,156 @@ export function PengaturanPage() {
               </CardContent>
             </Card>
 
-            {/* Card 5: Tanda Tangan Elektronik (TTE) */}
+            {/* Card 5: Tanda Tangan Elektronik (TTE) - Upload Gambar */}
             <Card className="animate-fade-in animate-stagger-5 border border-border/50 shadow-sm rounded-2xl card-hover">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><PenTool className="h-5 w-5" /> Tanda Tangan Elektronik (TTE)</CardTitle>
-                <CardDescription>Kelola tanda tangan elektronik Anda untuk dokumen resmi</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Stamp className="h-5 w-5" /> Tanda Tangan Elektronik (TTE)</CardTitle>
+                <CardDescription>Upload gambar tanda tangan untuk digunakan pada semua dokumen cetak resmi</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {loadingSignature ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="h-6 w-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : currentSignature ? (
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-4">
-                      {/* Signature Preview */}
-                      <div className="shrink-0 rounded-xl border border-border/50 bg-white p-3 shadow-sm">
-                        <img
-                          src={currentSignature.imageData}
-                          alt="Tanda Tangan Elektronik"
-                          className="h-16 w-auto max-w-[200px] object-contain"
-                        />
-                      </div>
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
-                            <CheckCircle className="h-3 w-3 mr-1" /> Aktif
-                          </Badge>
+                {/* TTE Image Upload Section */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Gambar Tanda Tangan (TTE)</Label>
+                  {localSettings.app_tte_image ? (
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-4">
+                        <div className="shrink-0 rounded-xl border border-border/50 bg-white p-3 shadow-sm">
+                          <img
+                            src={`${localSettings.app_tte_image}${localSettings.app_tte_image.includes('?') ? '&' : '?'}t=${tteTimestamp}`}
+                            alt="TTE Image"
+                            className="h-20 w-auto max-w-[240px] object-contain"
+                          />
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Dibuat: {new Date(currentSignature.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                        {currentSignature.updatedAt !== currentSignature.createdAt && (
-                          <p className="text-xs text-muted-foreground">
-                            Diperbarui: {new Date(currentSignature.updatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+                              <CheckCircle className="h-3 w-3 mr-1" /> Aktif
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Gambar TTE ini akan ditampilkan pada kolom tanda tangan di semua dokumen cetak resmi.
                           </p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Tanda tangan ini akan ditampilkan pada kolom tanda tangan di dokumen cetak resmi.
-                        </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => tteInputRef.current?.click()}
+                          className="gap-1.5 rounded-xl border-border/50 hover:border-teal-500/50 hover:text-teal-600"
+                        >
+                          <ImagePlus className="h-3.5 w-3.5" /> Ganti Gambar TTE
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch('/api/pengaturan/upload?type=tte', { method: 'DELETE' })
+                              if (!res.ok) throw new Error('Gagal menghapus')
+                              setLocalSettings(s => ({ ...s, app_tte_image: '' }))
+                              setTteTimestamp(Date.now())
+                              queryClient.invalidateQueries({ queryKey: ['pengaturan'] })
+                              toast.success('Gambar TTE berhasil dihapus')
+                            } catch (err: any) {
+                              toast.error(err.message || 'Gagal menghapus TTE')
+                            }
+                          }}
+                          className="gap-1.5 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Hapus
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSignatureDialogOpen(true)}
-                        className="gap-1.5 rounded-xl border-border/50 hover:border-teal-500/50 hover:text-teal-600"
+                  ) : (
+                    <div className="space-y-3">
+                      <div
+                        className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-muted-foreground/25 bg-muted/20 cursor-pointer hover:border-teal-500/50 hover:bg-muted/30 transition-colors"
+                        onClick={() => tteInputRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-teal-500', 'bg-teal-50', 'dark:bg-teal-950/20') }}
+                        onDragLeave={(e) => { e.currentTarget.classList.remove('border-teal-500', 'bg-teal-50', 'dark:bg-teal-950/20') }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.remove('border-teal-500', 'bg-teal-50', 'dark:bg-teal-950/20')
+                          const file = e.dataTransfer.files[0]
+                          if (file) handleFileUpload(file, 'tte')
+                        }}
                       >
-                        <PenLine className="h-3.5 w-3.5" /> Perbarui Tanda Tangan
-                      </Button>
+                        <Stamp className="h-10 w-10 text-muted-foreground/30 mb-2" />
+                        <p className="text-sm text-muted-foreground mb-1">Belum ada gambar TTE</p>
+                        <p className="text-xs text-muted-foreground/70">Klik atau seret gambar tanda tangan ke sini</p>
+                        <p className="text-xs text-muted-foreground/50 mt-1">Format: PNG, JPG, SVG (Maks. 2MB)</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => tteInputRef.current?.click()}
+                          className="gap-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-lg shadow-teal-500/20 flex-1"
+                        >
+                          <Upload className="h-4 w-4" /> Upload Gambar TTE
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setSignatureDialogOpen(true)}
+                          className="gap-1.5 rounded-xl border-border/50 hover:border-teal-500/50 hover:text-teal-600"
+                        >
+                          <PenLine className="h-4 w-4" /> Gambar Tangan
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  <input
+                    ref={tteInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleFileUpload(file, 'tte')
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
+
+                <Separator className="my-2" />
+
+                {/* Canvas Signature (alternative) */}
+                {localSettings.app_tte_image && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-muted-foreground">Atau Buat Tanda Tangan Manual (Canvas)</Label>
+                    {currentSignature ? (
+                      <div className="flex items-center gap-3">
+                        <div className="shrink-0 rounded-lg border border-border/50 bg-white p-2">
+                          <img
+                            src={currentSignature.imageData}
+                            alt="Tanda Tangan Canvas"
+                            className="h-8 w-auto max-w-[120px] object-contain"
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">Tanda tangan canvas tersimpan (tidak digunakan saat TTE gambar aktif)</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (currentSignature?.id) {
+                              deleteSignature.mutate(currentSignature.id)
+                            }
+                          }}
+                          disabled={deleteSignature.isPending}
+                          className="gap-1 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          if (currentSignature?.id) {
-                            deleteSignature.mutate(currentSignature.id)
-                          }
-                        }}
-                        disabled={deleteSignature.isPending}
-                        className="gap-1.5 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setSignatureDialogOpen(true)}
+                        className="gap-1.5 rounded-xl text-muted-foreground"
                       >
-                        <Trash2 className="h-3.5 w-3.5" /> Hapus
+                        <PenLine className="h-3.5 w-3.5" /> Buat Tanda Tangan Manual
                       </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex flex-col items-center justify-center py-6 rounded-xl border-2 border-dashed border-muted-foreground/25 bg-muted/20">
-                      <PenTool className="h-10 w-10 text-muted-foreground/30 mb-2" />
-                      <p className="text-sm text-muted-foreground mb-1">Belum ada tanda tangan elektronik</p>
-                      <p className="text-xs text-muted-foreground/70">Buat tanda tangan untuk digunakan pada dokumen cetak resmi</p>
-                    </div>
-                    <Button
-                      onClick={() => setSignatureDialogOpen(true)}
-                      className="gap-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-lg shadow-teal-500/20"
-                    >
-                      <PenLine className="h-4 w-4" /> Buat Tanda Tangan Elektronik
-                    </Button>
+                    )}
                   </div>
                 )}
               </CardContent>

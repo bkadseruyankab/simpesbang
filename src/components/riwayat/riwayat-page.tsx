@@ -422,7 +422,8 @@ export function RiwayatPage() {
           : `<div style="height:60px;"></div>`}
       <div class="sig-name">${settings.app_kepala_nama || '________________________'}</div>
       <div class="sig-jabatan">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>
-      ${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : `<div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>`}
+      <div class="sig-nip">${settings.app_kepala_nip ? `NIP. ${settings.app_kepala_nip}` : ''}</div>
+      ${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : ''}
     </div>
   </div>
   ` : ''}

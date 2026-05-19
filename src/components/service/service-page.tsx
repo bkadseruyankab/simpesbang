@@ -221,7 +221,7 @@ export function ServicePage() {
 
   const { data: vehiclesData } = useQuery({
     queryKey: ['vehicles-list'],
-    queryFn: () => fetch('/api/kendaraan').then(r => r.json()),
+    queryFn: () => fetch('/api/vehicles').then(r => r.json()),
   })
 
   const { data: workshopsData } = useQuery({
@@ -917,8 +917,13 @@ export function ServicePage() {
                           <TableCell className="text-center text-sm text-muted-foreground">
                             {(page - 1) * limit + idx + 1}
                           </TableCell>
-                          <TableCell className="font-mono text-sm font-medium">
-                            {service.nomorService}
+                          <TableCell>
+                            <div className="font-mono text-sm font-medium">
+                              {service.documentNumber || service.nomorService}
+                            </div>
+                            {service.documentNumber && (
+                              <div className="text-xs text-muted-foreground font-mono">{service.nomorService}</div>
+                            )}
                           </TableCell>
                           <TableCell className="text-sm">
                             {formatDate(service.tanggalService)}
@@ -1136,7 +1141,10 @@ export function ServicePage() {
                     </div>
                     <div>
                       <h2 className="text-lg font-bold">Detail Service</h2>
-                      <p className="text-sm text-slate-300 font-mono">{detail.nomorService}</p>
+                      <p className="text-sm text-slate-300 font-mono">{detail.documentNumber || detail.nomorService}</p>
+                      {detail.documentNumber && (
+                        <p className="text-xs text-slate-400 font-mono">{detail.nomorService}</p>
+                      )}
                     </div>
                   </div>
                   <Badge className={cn('text-sm border px-3 py-1', STATUS_COLORS[detail.statusService as StatusService])}>
@@ -1436,7 +1444,28 @@ export function ServicePage() {
                             const printItems = Array.isArray(detail.items) ? detail.items : []
                             const itemsSubtotal = printItems.reduce((sum: number, item: any) => sum + (item.totalHarga || 0), 0)
                             const printDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-                            const docNumber = `${String(Math.floor(Math.random() * 900) + 100)}/BKAD/TIMELINE/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`
+
+                            // Use existing document number or generate new one from API
+                            let docNumber = detail.documentNumber || `${String(Math.floor(Math.random() * 900) + 100)}/BKAD/SRV/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`
+                            if (!detail.documentNumber) {
+                              try {
+                                const genRes = await fetch('/api/document-numbering/generate', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ code: 'SRV' }),
+                                })
+                                if (genRes.ok) {
+                                  const genData = await genRes.json()
+                                  docNumber = genData.documentNumber
+                                  // Save document number to service record
+                                  fetch(`/api/service/${detail.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ documentNumber: docNumber }),
+                                  }).catch(() => {})
+                                }
+                              } catch {}
+                            }
 
                             // Build KOP SURAT HTML
                             const kopLogoHtml = settings.app_print_logo || settings.app_logo
@@ -1459,7 +1488,7 @@ export function ServicePage() {
                             ).join('')
 
                             // Build signature HTML with QR code for document and vehicle
-                            const docQrData = `${window.location.origin}/api/service/${detail.id}`
+                            const docQrData = `${window.location.origin}/verify/${detail.id}`
                             const vehicleInfo = `${detail.vehicle?.nomorPolisi || '-'}|${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}|${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}|${detail.vehicle?.nomorRangka || '-'}|${detail.vehicle?.nomorMesin || '-'}`
                             // Generate QR codes synchronously for print (using pre-generated data URLs as fallback)
                             let docQrImgHtml = `<div style="width:120px;height:120px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8pt;color:#888;">QR Code</div>`
@@ -1470,7 +1499,7 @@ export function ServicePage() {
                               const vehQr = await generateQRDataURL(vehicleInfo, 100)
                               if (vehQr) vehicleQrImgHtml = `<img src="${vehQr}" alt="QR Code Kendaraan" style="width:100px;height:100px;" />`
                             } catch {}
-                            const sigHtml = `<div class="signature-section"><div class="sig-qr">${docQrImgHtml}<div class="sig-qr-label">Scan untuk detail service</div></div><div class="sig-block"><div class="sig-date">${settings.app_kabupaten_kota || settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div><div class="sig-jabatan">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>${settings.app_tte_image ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>` : kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-nip">NIP. ${settings.app_kepala_nip || '________________________'}</div>${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : ''}</div></div><div class="vehicle-qr-section">${vehicleQrImgHtml}<div class="vehicle-qr-info"><div class="vehicle-qr-title">QR Code Kendaraan</div><div class="vehicle-qr-detail">${detail.vehicle?.nomorPolisi || '-'} &bull; ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}<br/>${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}${detail.vehicle?.nomorRangka ? ` | Rangka: ${detail.vehicle.nomorRangka}` : ''}${detail.vehicle?.nomorMesin ? ` | Mesin: ${detail.vehicle.nomorMesin}` : ''}</div></div></div>`
+                            const sigHtml = `<div class="signature-section"><div class="sig-qr">${docQrImgHtml}<div class="sig-qr-label">Scan untuk verifikasi dokumen</div></div><div class="sig-block"><div class="sig-date">${settings.app_kabupaten_kota || settings.app_tempat_ttd || 'Kabupaten/Kota'}, ${printDate}</div><div class="sig-jabatan">${settings.app_kepala_jabatan || 'Kepala BKAD'}</div>${settings.app_tte_image ? `<div style="height:70px;display:flex;align-items:flex-end;justify-content:center;"><img src="${window.location.origin}${settings.app_tte_image}" alt="Tanda Tangan Elektronik" style="max-height:70px;max-width:200px;object-fit:contain;" /></div>` : kepalaSignature ? `<div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><img src="${kepalaSignature}" alt="Tanda Tangan" style="max-height:55px;max-width:180px;object-fit:contain;" /></div>` : `<div style="height:60px;"></div>`}<div class="sig-name">${settings.app_kepala_nama || '________________________'}</div><div class="sig-nip">NIP. ${settings.app_kepala_nip || '________________________'}</div>${settings.app_tte_image ? `<div class="sig-tte-label">Tanda Tangan Elektronik</div>` : ''}</div></div><div class="vehicle-qr-section">${vehicleQrImgHtml}<div class="vehicle-qr-info"><div class="vehicle-qr-title">QR Code Kendaraan</div><div class="vehicle-qr-detail">${detail.vehicle?.nomorPolisi || '-'} &bull; ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}<br/>${detail.vehicle?.jenisKendaraan === 'RODA_2' ? 'Roda 2' : 'Roda 4'}${detail.vehicle?.nomorRangka ? ` | Rangka: ${detail.vehicle.nomorRangka}` : ''}${detail.vehicle?.nomorMesin ? ` | Mesin: ${detail.vehicle.nomorMesin}` : ''}</div></div></div>`
 
                             const printHtml = `<!DOCTYPE html>
 <html lang="id">
@@ -1552,9 +1581,10 @@ export function ServicePage() {
   ${kopHtml}
   <div class="doc-info">
     <div class="doc-title">TIMELINE SERVICE KENDARAAN</div>
-    <div class="doc-meta">Nomor: ${docNumber}<br/>Nomor Service: ${detail.nomorService}<br/>Tanggal Cetak: ${printDate}</div>
+    <div class="doc-meta">Nomor Surat: ${docNumber}<br/>Nomor Service: ${detail.nomorService}<br/>Tanggal Cetak: ${printDate}</div>
   </div>
   <div class="info-grid">
+    <span class="info-label">Nomor Surat</span><span style="font-weight:bold;">${docNumber}</span>
     <span class="info-label">Nomor Service</span><span>${detail.nomorService}</span>
     <span class="info-label">Tanggal</span><span>${detail.tanggalService ? new Date(detail.tanggalService).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}</span>
     <span class="info-label">Kendaraan</span><span>${detail.vehicle?.nomorPolisi || '-'} - ${detail.vehicle?.merk || ''} ${detail.vehicle?.type || ''}</span>
@@ -2249,7 +2279,7 @@ function ServiceFormDialog({ open, onOpenChange, editingService, vehicles, works
                     <div className="p-2">
                       <Input placeholder="Cari nopol..." value={vehicleSearch} onChange={(e) => setVehicleSearch(e.target.value)} className="h-8 text-sm" />
                     </div>
-                    <ScrollArea className="max-h-48">
+                    <ScrollArea className="max-h-72">
                       {filteredVehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id}>{v.nomorPolisi} - {v.merk} {v.type}</SelectItem>
                       ))}

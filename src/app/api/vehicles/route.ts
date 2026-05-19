@@ -30,9 +30,9 @@ export async function GET(request: NextRequest) {
         type: true,
         jenisKendaraan: true,
         statusKendaraan: true,
+        kilometerTerakhir: true,
       },
       orderBy: { nomorPolisi: 'asc' },
-      take: 100,
     })
 
     return NextResponse.json(vehicles)
